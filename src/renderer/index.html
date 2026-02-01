@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com">
+  <title>Port Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1 class="title">Port Manager</h1>
+      <div class="header-actions">
+        <input type="text" id="search" class="search" placeholder="Search port, process, PID...">
+        <button id="refresh" class="btn btn-primary">
+          <span class="btn-icon">↻</span> Refresh
+        </button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+        <button id="tab-all" class="tab active">All Ports</button>
+        <button id="tab-dev" class="tab">Development</button>
+      </nav>
+
+    <main class="main">
+      <div id="loading" class="loading hidden">
+        <span class="spinner"></span>
+        <span>Loading ports...</span>
+      </div>
+
+      <div id="error" class="error hidden"></div>
+
+      <div id="tab-all-content" class="tab-content">
+        <div id="table-wrap" class="table-wrap">
+        <table class="port-table">
+          <thead>
+            <tr>
+              <th data-sort="port">Port</th>
+              <th data-sort="protocol">Protocol</th>
+              <th data-sort="portType" title="Hover over a badge for details. Unknown = port not in our database.">Type</th>
+              <th data-sort="applicationName">Application</th>
+              <th data-sort="pid">PID</th>
+              <th data-sort="localAddress">Local Address</th>
+              <th>Tag</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+        </div>
+      </div>
+
+      <div id="tab-dev-content" class="tab-content hidden">
+        <div id="dev-empty" class="dev-empty">
+          <p>No development ports tagged yet.</p>
+          <p class="dev-empty-hint">Go to <strong>All Ports</strong> and use the <strong>Tag</strong> dropdown to tag ports as Backend, Frontend, or Database.</p>
+        </div>
+        <div id="dev-groups"></div>
+      </div>
+    </main>
+
+    <div id="details" class="details-panel hidden">
+      <div class="details-header">
+        <h3>Process details</h3>
+        <button id="details-close" class="btn btn-ghost">×</button>
+      </div>
+      <div class="details-content">
+        <p><strong>Application:</strong> <span id="detail-app"></span></p>
+        <p><strong>Process:</strong> <span id="detail-name"></span></p>
+        <p><strong>PID:</strong> <span id="detail-pid"></span></p>
+        <p><strong>Port:</strong> <span id="detail-port"></span></p>
+        <p><strong>Description:</strong> <span id="detail-desc"></span></p>
+        <p><strong>Path:</strong> <span id="detail-path" class="mono"></span></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
