@@ -6,7 +6,8 @@
 **Audited ref:** main, commit e4a1585cb7755c24a04140834d92d9a3754d28ee  
 **Requirements baseline:** MASTER_PLAN.md v1 on docs/master-plan-v1 (draft PR #1)  
 **App code modified:** No  
-**Status:** **Not release-ready. Windows runtime/packaging validation remains open.**
+**Status:** **Source and controlled-execution audit accepted for planning; Windows runtime/packaging validation deferred by project owner (2026-10-30). Not release-ready.**
+**Deferred testing register:** [DEFERRED_WINDOWS_TESTING.md](DEFERRED_WINDOWS_TESTING.md). Deferral is not a passing result or release waiver.
 
 > **Integrity note:** This audit inspects the entire tracked app tree and executes the **actual unmodified** main-process, service, and renderer source within controlled JavaScript test harnesses. Windows commands, IPC events, and DOM APIs were mocked; no actual Windows process was killed, and the packaged Electron application was not started. “Reproduced with mocks” must not be confused with “reproduced on Windows.” No penetration test, full dependency vulnerability scan, package installation, or signed-binary review was performed.
 
@@ -396,13 +397,26 @@ For each test run record:
 | Entire tracked source mapped | **Complete** | Current tree, app code, config, README and lockfile read |
 | Mock-reproduced bug evidence | **Complete for selected cases** | S01–S11, R01–R05, I01 |
 | Requirements gap matrix | **Complete (static)** | FR-01–FR-17 mapped to code |
-| Windows runtime defect reproduction | **OPEN** | Windows environment unavailable to this audit run |
-| Windows performance benchmark | **OPEN** | Synthetic call counts only |
-| Dependency vulnerability scan | **OPEN** | Lock reviewed, registry/SCA scan not run |
-| Installer/portable smoke test | **OPEN** | No Windows binary built or started |
-| Security validation/pentest | **OPEN** | Security boundary inspected; no real penetration test |
-| Phase 2 fully complete | **NO** | Requires Windows evidence and release-environment checks |
+| Windows runtime defect reproduction | **DEFERRED / NOT PASSED** | See WT-01–WT-08 in DEFERRED_WINDOWS_TESTING.md |
+| Windows performance benchmark | **DEFERRED / NOT PASSED** | WT-09; synthetic call counts only |
+| Dependency vulnerability scan | **DEFERRED / NOT PASSED** | WT-11; lock reviewed only |
+| Installer/portable smoke test | **DEFERRED / NOT PASSED** | WT-10; no Windows binary built or started |
+| Security validation/pentest | **DEFERRED / NOT PASSED** | WT-07/08; security boundary inspected, no penetration test |
+| Phase 2 fully complete | **NO** | Windows tests explicitly deferred by owner; cannot close Phase 2 until evidence is recorded |
 | Public executable release gate | **FAIL** | Safety and feature requirements not yet met |
+
+## H.1 Deferred testing decision — 2026-10-30
+
+**Decision:** Project owner will run Windows tests later. This is an intentional deferral of execution, not a change to test scope, severity, product acceptance criteria, or release policy.
+
+- **Completed now:** Static source review, controlled-execution probes, feature coverage mapping, and prioritized remediation recommendations.
+- **Deferred:** Real Windows discovery/process-tree/termination/permission tests, system compatibility, security validation, benchmarking, package/install checks, dependency vulnerability scanning, and accessibility verification. See the detailed **WT-01–WT-12 register** in [DEFERRED_WINDOWS_TESTING.md](DEFERRED_WINDOWS_TESTING.md).
+- **May proceed:** Planning, architecture exploration, and safety-first implementation *with relevant unknowns explicitly recorded*.
+- **Must not claim:** Phase 2 is fully closed, Windows compatibility confirmed, the executable release production-ready, or tests passed.
+- **Before publication of executable binaries:** Complete outstanding release-critical tests, resolve unsafe behavior, reassess audit findings using evidence, and obtain explicit release readiness sign-off.
+- **Timing:** No testing date or automated execution is scheduled.
+
+**Documentation approval is not process-safety certification or permission to publish binaries.**
 
 ## I. Source/reference notes
 
