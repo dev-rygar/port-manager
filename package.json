@@ -9,7 +9,7 @@
     "build": "electron-builder --win",
     "build:portable": "electron-builder --win portable",
     "test": "node --test",
-    "check:syntax": "node --check main.js && node --check preload.js && node --check src/services/portService.js && node --check src/services/portReference.js && node --check src/renderer/app.js"
+    "check:syntax": "node --check main.js && node --check preload.js && node --check src/services/portService.js && node --check src/services/portReference.js && node --check src/renderer/app.js && node --check src/services/ipcSecurity.js && node --check src/services/terminationPolicy.js"
   },
   "keywords": [
     "port",
