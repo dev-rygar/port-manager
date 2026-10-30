@@ -63,7 +63,9 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [x] Record an [initial/follow-up triage summary](https://github.com/dev-rygar/port-manager/blob/audit/engineering-audit-v1/docs/test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md) in audit PR #2; **local source reports not yet directly reviewed**.
 - [x] Receive Codex follow-up root-cause chain: **WMIC absent → tasklist Access denied → swallowed error → empty metadata map → Unknown name**. Netstat listener detection worked for the test case; PowerShell `npm.ps1` execution policy is unrelated.
 - [ ] Obtain/review sanitized full **initial and follow-up** reports, exact tested commit, Windows build, execution context, and command-level errors.
-- [ ] Compare `tasklist`, CIM, NetTCP and `Get-Process` access from a **normal non-elevated PowerShell** versus Codex environment; cause of access denied outside Codex remains unknown.
+- [x] Confirm `tasklist` and `Get-Process` can identify the user's own PowerShell process in a normal non-elevated terminal (2026-10-31, PID 20000); earlier Codex denial is environment-dependent in this example.
+- [ ] Isolate CIM and Get-NetTCPConnection in normal PowerShell with explicit formatting and errors; result of earlier combined output is inconclusive.
+- [ ] Test process metadata for a disposable listener from the actual Electron app in a non-elevated desktop session; avoid termination.
 - [ ] Make metadata failures explicit (permission denied, command unavailable, process exited) rather than silently appearing as `Unknown`.
 - [ ] Choose and validate a least-privilege metadata fallback not dependent on WMIC or requiring blanket elevation.
 - [ ] Rerun WT-01–WT-03 after fixes; do not change FAIL/NOT IMPLEMENTED to PASS without evidence.
@@ -181,11 +183,12 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order
 
-1. **Preserve and review both local Windows reports:** share sanitized original evidence, exact tested commit, Windows build and permission context; do not confuse owner-reported roots with independently reviewed logs.
-2. **Implement focused, non-destructive process metadata fixes:** explicitly propagate `tasklist`/CIM access-denied diagnostics, avoid WMIC dependency, and add mocked regression coverage; choose fallback only after ordinary-shell verification.
-3. **Integrate existing PRs in dependency order:** documentation PRs #1 → #2 → #3; M0 test PR #4; stacked M1.1 safety PR #5, checking CI and merge context.
-4. **Continue M1.2 and M2 safety/discovery work:** validated process-instance identity, impact preview, termination result verification, and accurate metadata/relationships.
-5. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
+1. **Finish the Windows API permission comparison:** normal PowerShell `tasklist` and `Get-Process` succeeded for the shell PID; isolate CIM/NetTCP and record errors explicitly.
+2. **Preserve and review both local Windows reports:** share sanitized original evidence, exact tested commit, Windows build and permission context; do not confuse owner-reported roots with independently reviewed logs.
+3. **Implement focused, non-destructive process metadata fixes:** explicitly propagate `tasklist`/CIM access-denied diagnostics, avoid WMIC dependency, and add mocked regression coverage; choose fallback only after ordinary-shell verification.
+4. **Integrate existing PRs in dependency order:** documentation PRs #1 → #2 → #3; M0 test PR #4; stacked M1.1 safety PR #5, checking CI and merge context.
+5. **Continue M1.2 and M2 safety/discovery work:** validated process-instance identity, impact preview, termination result verification, and accurate metadata/relationships.
+6. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
 
 **Important:** Do not add automatic killing or broaden bulk-termination behavior while identity and permission safety remain unresolved.
 
