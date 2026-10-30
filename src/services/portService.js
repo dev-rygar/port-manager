@@ -1,6 +1,8 @@
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+const { parseProcessId, assertProcessCanBeStopped } = require('./terminationPolicy');
 const { getPortInfo, getFriendlyProcessName, getFallbackAppName } = require('./portReference');
 
 /** Known executable → app name mappings (fast path) */
@@ -45,7 +47,12 @@ async function getNetstat() {
 
     // Only include LISTENING for TCP, or all for UDP (no state)
     if (proto === 'TCP' && state !== 'LISTENING') continue;
-    if (pid === '0' || isNaN(parseInt(pid, 10))) continue;
+    let parsedPid;
+    try {
+      parsedPid = parseProcessId(pid);
+    } catch {
+      continue;
+    }
 
     const portMatch = localAddr.match(/:(\d+)$/);
     const port = portMatch ? portMatch[1] : null;
@@ -55,7 +62,7 @@ async function getNetstat() {
       protocol: proto,
       localAddress: localAddr,
       state: state || '-',
-      pid: parseInt(pid, 10),
+      pid: parsedPid,
       port: parseInt(port, 10),
     });
   }
@@ -212,20 +219,37 @@ async function getPorts() {
 }
 
 /**
- * Kill a process by PID using taskkill.
+ * Conservative, non-atomic safety checks before stopping a port-owning PID.
+ * NOTE: This is NOT yet a PID-reuse-proof process identity contract. The
+ * preview/revalidate/verify workflow will be implemented separately in M1/M2.
  */
 async function killProcess(pid) {
-  const n = parseInt(pid, 10);
-  if (!Number.isInteger(n) || n <= 0 || n >= 65536) {
-    throw new Error('Invalid PID');
-  }
+  const id = parseProcessId(pid);
 
-  await execAsync(`taskkill /PID ${n} /F`, {
-    encoding: 'utf8',
-    windowsHide: true,
+  // Block PID 4 without launching discovery or the termination executable.
+  if (id === 4) throw new Error('Protected Windows process');
+
+  // A stale PID absent from current listening sockets must never be targeted.
+  const listeners = await getNetstat();
+  const ownsListeningPort = listeners.some((row) => row.pid === id);
+
+  // Fail closed when WMIC/tasklist cannot establish a usable process name.
+  const processInfo = ownsListeningPort ? await getProcessInfo([id]) : new Map();
+  assertProcessCanBeStopped({
+    pid: id,
+    processName: processInfo.get(id)?.name,
+    ownsListeningPort,
   });
 
-  return { success: true, pid: n };
+  // Shell interpolation is not necessary: send an argument array to taskkill.
+  await execFileAsync('taskkill', ['/PID', String(id), '/F'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 5000,
+  });
+
+  // taskkill success is NOT proof that the process exited or port is now free.
+  return { success: true, pid: id };
 }
 
 module.exports = { getPorts, killProcess };
