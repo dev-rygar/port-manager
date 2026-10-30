@@ -7,9 +7,17 @@
     "start": "electron .",
     "dev": "electron . --enable-logging",
     "build": "electron-builder --win",
-    "build:portable": "electron-builder --win portable"
+    "build:portable": "electron-builder --win portable",
+    "test": "node --test",
+    "check:syntax": "node --check main.js && node --check preload.js && node --check src/services/portService.js && node --check src/services/portReference.js && node --check src/renderer/app.js"
   },
-  "keywords": ["port", "manager", "windows", "netstat", "kill"],
+  "keywords": [
+    "port",
+    "manager",
+    "windows",
+    "netstat",
+    "kill"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
@@ -29,8 +37,18 @@
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "signAndEditExecutable": false
     },
