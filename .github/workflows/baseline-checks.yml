@@ -1,0 +1,27 @@
+name: Baseline Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-unit:
+    name: Syntax and mocked unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # No npm install is needed: this suite uses only Node built-ins and
+      # intercepts all Windows command execution. Windows runtime tests remain deferred.
+      - name: Check syntax
+        run: npm run check:syntax
+      - name: Run isolated baseline checks
+        run: npm test
