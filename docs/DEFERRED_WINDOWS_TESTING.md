@@ -24,6 +24,12 @@ The project owner ran initial and follow-up Windows diagnostics with VS Code Cod
 
 The full initial and follow-up local reports are not accessible in this GitHub update; findings are **owner-reported** until command-level evidence is reviewed. The follow-up identifies a concrete app failure chain: missing WMIC → `tasklist` **Access denied** → exception swallowed → empty metadata map → displayed process name `Unknown`. The Codex-session permission limitation still requires comparison with a normal non-elevated shell. PowerShell's `npm.ps1` execution policy is unrelated to these metadata failures.
 
+### Additional ordinary-terminal evidence — 2026-10-31
+
+The owner executed read-only commands in **normal, non-elevated PowerShell outside Codex**. `Get-Process` and `tasklist /FI "PID eq $myPid" /FO CSV /NH` successfully identified the shell's own PID (`20000`) and `powershell.exe`. This demonstrates `tasklist` **works in that context**, contrary to the access denial reported in the Codex session. The cause of the environment difference is not yet isolated.
+
+The combined console output for `Get-CimInstance` and `Get-NetTCPConnection` was ambiguous/blank, so neither is currently certified accessible outside Codex. Rerun each command separately with explicit error handling and formatting. **WT-01 and WT-02 remain FAIL / BLOCKED**, and WT-03 NOT IMPLEMENTED / BLOCKED. More details are logged in the [triage note](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md).
+
 ## 2. Deferred test register
 
 | ID | Deferred activity | What completion must demonstrate | Status |
