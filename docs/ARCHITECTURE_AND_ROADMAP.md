@@ -1,5 +1,6 @@
 # Port Manager — Phase 3 Architecture & Implementation Roadmap
 
+**Progress checklist:** [PROJECT_TRACKER.md](../PROJECT_TRACKER.md) — phase statuses, task checklists, PR integration and deferred testing.  
 **Version:** 0.1 — provisional architecture proposal  
 **Date:** 2026-10-30  
 **Status:** Ready for product/engineering review; **not** finalized or approved for production  
