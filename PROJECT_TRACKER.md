@@ -1,8 +1,8 @@
 # Port Manager — Project Tracker
 
-**Last updated:** 2026-10-30  
+**Last updated:** 2026-10-31  
 **Status:** In development — **not production-ready**  
-**Current focus:** Phase 4 / M1 — process safety  
+**Current focus:** Phase 2 Windows WT-01–WT-03 triage alongside Phase 4 / M1 safety  
 **Application baseline on main:** e4a1585cb7755c24a04140834d92d9a3754d28ee
 
 This is the **central progress checklist** for development and release readiness. For *what* to build, use the [Master Plan](https://github.com/dev-rygar/port-manager/pull/1); for *how* and milestone scope, use the [Architecture & Roadmap](https://github.com/dev-rygar/port-manager/pull/3); for findings and test requirements, use the [Engineering Audit](https://github.com/dev-rygar/port-manager/pull/2).
@@ -14,14 +14,14 @@ This is the **central progress checklist** for development and release readiness
 | Phase | Status | Remaining gate |
 | --- | --- | --- |
 | 1 — Master Plan | **Approved; PR unmerged** | Merge PR #1 |
-| 2 — In-depth audit | **Source/controlled audit documented; Windows validation deferred** | Windows evidence WT-01–WT-12; close audit |
+| 2 — In-depth audit | **Initial Windows checks resumed: WT-01/02 FAIL, WT-03 NOT IMPLEMENTED (owner report)** | Diagnose and rerun WT-01–WT-03; WT-04–WT-12 still deferred |
 | 3 — Architecture and roadmap | **Direction approved; OS choices provisional; PR unmerged** | Merge PR #3; finalize Windows-dependent decisions after testing |
 | 4 — Incremental implementation | **In progress: M0 and M1.1 work on branches** | Integrate PRs #4 and #5; complete M1.2, M2, M3, M4 |
 | 5 — Production validation | **Not started** | Verify all safety, acceptance, and release gates |
 
 ## 2. GitHub PR integration tracker
 
-**Verified 2026-10-30:** All five PRs below are **open and unmerged**. Only the original application code is on main.
+**Verified 2026-10-31:** All five PRs below remain **open and unmerged**. Only the original application code is on main.
 
 | PR | Deliverable | GitHub state | Dependency |
 | --- | --- | --- | --- |
@@ -59,8 +59,13 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [x] Run controlled-execution checks with mocked Windows command, renderer and IPC boundaries.
 - [x] Record 20 prioritized findings and FR-01–FR-17 coverage.
 - [x] Document owner's choice to **defer Windows testing**, with scope and evidence templates.
+- [x] Receive owner's **initial Windows WT-01–WT-03 report** (2026-10-31): WT-01 FAIL (WMIC unavailable/CIM and NetTCP access denied), WT-02 FAIL (netstat PID matched but app owner name Unknown), WT-03 NOT IMPLEMENTED.
+- [x] Record a [reported-results triage summary](https://github.com/dev-rygar/port-manager/blob/audit/engineering-audit-v1/docs/test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md) in audit PR #2; **source report not yet reviewed**.
+- [ ] Obtain/review sanitized full original report, exact tested commit, Windows build, execution context, and command-level errors.
+- [ ] Investigate Access denied in normal non-elevated PowerShell versus Codex terminal, and identify why WMIC/tasklist fallback yielded Unknown.
+- [ ] Rerun WT-01–WT-03 after fixes; do not change FAIL/NOT IMPLEMENTED to PASS without evidence.
 - [ ] Merge [Audit PR #2](https://github.com/dev-rygar/port-manager/pull/2).
-- [ ] Perform deferred **WT-01–WT-12** (or justify any N/A), with exact Windows builds and tested commits.
+- [ ] Complete follow-up for **WT-01–WT-03** and remaining **WT-04–WT-12** (or justify any N/A), with exact Windows builds and tested commits.
 - [ ] Verify actual discovery, identity/parent-child relationships, permissions, process lifecycle and port occupancy.
 - [ ] Check runtime security, accessibility, benchmarks, dependency vulnerabilities, installer and portable packages.
 - [ ] Update findings against Windows evidence and close Phase 2 exit gate.
@@ -123,6 +128,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ### M2 — Windows discovery and process relationships
 
+- [ ] Investigate **2026-10-31 WT-01 and WT-02 failures**: missing WMIC, CIM/NetTCP Access denied (environment/policy vs OS), and unknown process owner despite correct netstat PID.
 - [ ] Replace WMIC dependency with a validated supported discovery/metadata approach.
 - [ ] Preserve distinct TCP listening endpoints (address, port, protocol and owner).
 - [ ] Retrieve verified available process identity, path, command line, parent and descendants.
@@ -171,11 +177,11 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order
 
-1. **Integrate documentation:** review PRs #1 → #2 → #3.
-2. **Integrate test foundation:** review/merge PR #4, confirming latest CI.
-3. **Integrate initial guards:** review PR #5, which is stacked on #4; retarget/rebase if needed, confirm CI and merge.
-4. **Resume safety implementation:** M1.2 process identity, preview, verification and safe batch contracts.
-5. **Run deferred Windows tests later:** gather WT-01–WT-12 evidence before final OS/termination decisions and any release.
+1. **Review WT-01–WT-03 original evidence:** attach a sanitized report; verify tested commit, Windows build, and why CIM/NetTCP were denied.
+2. **Reproduce process-identification failure:** compare netstat PID against tasklist and app metadata fallback in non-elevated shell; fix the root cause before retesting.
+3. **Integrate existing work:** review documentation PRs #1 → #2 → #3, test PR #4, and stacked safety PR #5 (confirm CI and merge dependencies).
+4. **Implement safety-first M1.2 / discovery M2:** identity, preview, verification, and supported process metadata, with regression tests.
+5. **Rerun WT-01–WT-03, then WT-04–WT-06 once safeguards exist:** WT-07–WT-12 remain tracked before production release.
 
 **Important:** Do not add automatic killing or broaden bulk-termination behavior while identity and permission safety remain unresolved.
 
