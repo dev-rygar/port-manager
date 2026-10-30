@@ -1,10 +1,11 @@
 # Deferred Windows Testing — Port Manager
 
-**Status:** Deferred by project owner on 2026-10-30  
+**Status:** Partial resumed testing reported on 2026-10-31 (WT-01/02 FAIL; WT-03 NOT IMPLEMENTED); remaining validation deferred  
 **Related audit:** [ENGINEERING_AUDIT.md](ENGINEERING_AUDIT.md)  
 **Audit PR:** [#2 — Phase 2 engineering audit](https://github.com/dev-rygar/port-manager/pull/2)  
 **Audit target:** main at e4a1585cb7755c24a04140834d92d9a3754d28ee  
-**Responsible:** Project owner (manual Windows validation), with results to be assessed against the audit.
+**Responsible:** Project owner (Codex-assisted Windows validation), with evidence and retry results to be assessed against the audit.
+**Initial Windows triage:** [WT-01–WT-03 reported results](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md).
 
 > **Decision:** Accept the source-level and controlled-execution audit report for planning purposes now. **Defer hands-on Windows validation to a later session.** This is a schedule deferral, **not** a passing test result, waiver of safety controls, or approval to ship production executables.
 
@@ -17,13 +18,19 @@
 
 **No production Windows runtime tests were performed.** No actual system process was terminated.
 
+## 1.1 Initial Windows testing resumed — 2026-10-31
+
+The project owner ran initial Windows diagnostics with VS Code Codex and reported: **WT-01 FAIL**, **WT-02 FAIL**, and **WT-03 NOT IMPLEMENTED**. This updates the prior "all deferred" state but does **not** complete those three tests or close the phase. See the [triage record](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md).
+
+The complete local report is not available to this GitHub update; conclusions are labeled **owner-reported** until reviewed against command-level evidence. The next work is to diagnose access-denied context and the missing process name, implement the missing metadata capabilities, and rerun the tests.
+
 ## 2. Deferred test register
 
 | ID | Deferred activity | What completion must demonstrate | Status |
 | --- | --- | --- | --- |
-| WT-01 | Windows 10/11 compatibility matrix | Agreed supported editions/builds; app runs and discovers listeners with/without WMIC | Deferred |
-| WT-02 | Actual port and process discovery | Match sample TCP listeners and owning PIDs against Windows OS data; IPv4/IPv6/address fidelity | Deferred |
-| WT-03 | Process metadata and relationships | Name, executable path, command line where permitted; parent/child relationships and missing-permission behavior | Deferred |
+| WT-01 | Windows 10/11 compatibility matrix | Agreed supported editions/builds; app runs and discovers listeners with/without WMIC | **Reported FAIL 2026-10-31 — missing WMIC / access denied; verify context, rerun** |
+| WT-02 | Actual port and process discovery | Match sample TCP listeners and owning PIDs against Windows OS data; IPv4/IPv6/address fidelity | **Reported FAIL 2026-10-31 — listener matched, owner name Unknown; diagnose, rerun** |
+| WT-03 | Process metadata and relationships | Name, executable path, command line where permitted; parent/child relationships and missing-permission behavior | **Reported NOT IMPLEMENTED 2026-10-31 — identity/ancestry/command line missing; implement, rerun** |
 | WT-04 | Single process stop and related ports | Controlled test process with multiple ports, preview of impact, stop result and post-stop listener state | Deferred |
 | WT-05 | Bulk stop and partial failure | Two or more **test-only** processes; deduplicate targets; accurately report success, failure and exclusions | Deferred |
 | WT-06 | Identity changes / stale snapshots | Process exits before action, PID reuse simulations/controlled repro, concurrent refresh, immediate port rebinding | Deferred |
@@ -89,14 +96,14 @@ Treat process command lines and executable paths as potentially private when sha
 | Decision/gate | Status |
 | --- | --- |
 | Source-level audit accepted for planning | Accepted |
-| Windows integration and runtime validation | **Deferred, not passed** |
+| Windows integration and runtime validation | **Partial initial attempt reported; WT-01/02 FAIL, WT-03 NOT IMPLEMENTED; WT-04–WT-12 deferred; not passed** |
 | Production-ready claim | **Not approved** |
 | Publishing/installing public executable binaries as production-ready | **Blocked** until gates pass |
 | Preliminary architecture design and planning | May proceed with open risks clearly documented |
 | Finalizing OS adapter and critical termination-policy decisions | Conditional on Windows validation and safety evidence |
 | Closing Phase 2 completely | **Not yet allowed**; attach test evidence and update exit-gate status first |
 
-The project owner may resume WT-01–WT-12 later. No date has been committed and **no automatic/background testing has been scheduled**.
+The project owner resumed initial checks WT-01–WT-03 on 2026-10-31, with failures/feature gaps reported. Their full local Markdown report has **not** been imported or independently reviewed here. WT-01–WT-03 still require follow-up and WT-04–WT-12 remain deferred. **No automatic/background testing has been scheduled**.
 
 ## 6. Procedure to close the deferral
 
