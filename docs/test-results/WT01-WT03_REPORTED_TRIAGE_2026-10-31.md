@@ -67,6 +67,18 @@ netstat -ano -p tcp | Select-String ":<TEST_PORT>"
 
 **Important:** Replacing `<TEST_PORT>` in the last command with the actual test port is required. Do not execute commands that stop or modify arbitrary existing processes. If permission is denied, retain sanitized command name, error category, and whether the shell was Codex-managed or an ordinary terminal.
 
+## 3.1 Ordinary PowerShell diagnostic — 2026-10-31
+
+**Evidence:** The owner pasted direct terminal output from a **normal PowerShell session outside Codex**. Test command was `tasklist /FI "PID eq $myPid" /FO CSV /NH` with `$myPid = $PID`.
+
+- **Observed:** `Get-Process -Id $myPid` identified `powershell` and PID `20000`; `tasklist` returned `"powershell.exe","20000","Console","1","108,660 K"`.
+- **Interpretation:** `tasklist` and the native PowerShell process query **succeeded without elevation for this own-process example**. The earlier Codex-session tasklist access denial does not imply tasklist is unavailable or universally requires admin rights.
+- **Still inconclusive:** The pasted combined command output did not clearly display CIM or `Get-NetTCPConnection` results; mixed formatting of multiple selections is a plausible cause. Do not mark either API as passing or failing outside Codex yet. Run each separately with explicit `-ErrorAction Stop` and `Format-List | Out-String`.
+- **Not yet tested:** The disposable listener's metadata through an actual packaged Electron app in a normal desktop context.
+- **Privacy:** Report preserves only the test process's own PID and name, not personal paths or unrelated process details.
+
+**Assessment:** Strong evidence of an execution-context difference for `tasklist`, but not proof of the exact Codex sandbox restriction. Keep WT-01/WT-02 FAIL / BLOCKED pending a controlled retest of the full application.
+
 ## 4. Next engineering and test actions
 
 - [ ] Attach or share a **sanitized copy of the original local report** so its OS build, tested commit, command outputs, and error contexts can be reviewed. The local Windows path itself is not accessible from this conversation.
