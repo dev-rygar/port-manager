@@ -31,7 +31,10 @@ function createServiceHarness(resolver) {
   const module = { exports: {} };
   const fakeRequire = (id) => {
     if (id === 'child_process') {
-      return { exec: () => { throw new Error('OS command execution is forbidden in tests'); } };
+      return {
+        exec: () => { throw new Error('OS execution is forbidden in tests'); },
+        execFile: () => { throw new Error('OS execution is forbidden in tests'); },
+      };
     }
     if (id === 'util') {
       return {
@@ -41,9 +44,8 @@ function createServiceHarness(resolver) {
         },
       };
     }
-    if (id === './portReference') {
-      return require('../src/services/portReference');
-    }
+    if (id === './portReference') return require('../src/services/portReference');
+    if (id === './terminationPolicy') return require('../src/services/terminationPolicy');
     throw new Error('Unexpected module: ' + id);
   };
   vm.runInNewContext(source('src/services/portService.js'), {
@@ -55,6 +57,7 @@ function createServiceHarness(resolver) {
 function defaultCommands(command) {
   if (command === 'netstat -ano') return SAMPLE_NETSTAT;
   if (command.startsWith('wmic ')) return SAMPLE_WMIC;
+  if (command === 'taskkill') return 'SUCCESS';
   throw new Error('Unexpected OS command in test: ' + command);
 }
 
