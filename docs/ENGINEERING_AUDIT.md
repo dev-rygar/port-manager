@@ -6,8 +6,9 @@
 **Audited ref:** main, commit e4a1585cb7755c24a04140834d92d9a3754d28ee  
 **Requirements baseline:** MASTER_PLAN.md v1 on docs/master-plan-v1 (draft PR #1)  
 **App code modified:** No  
-**Status:** **Source and controlled-execution audit accepted for planning; Windows runtime/packaging validation deferred by project owner (2026-10-30). Not release-ready.**
+**Status:** **Source/controlled audit accepted for planning; initial WT-01–WT-03 Windows testing resumed and found issues (owner report, 2026-10-31). WT-04–WT-12 and retesting remain outstanding. Not release-ready.**
 **Deferred testing register:** [DEFERRED_WINDOWS_TESTING.md](DEFERRED_WINDOWS_TESTING.md). Deferral is not a passing result or release waiver.
+**Initial Windows triage:** [WT-01–WT-03 reported results](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md). Results summarized by owner; full local report not reviewed here.
 
 > **Integrity note:** This audit inspects the entire tracked app tree and executes the **actual unmodified** main-process, service, and renderer source within controlled JavaScript test harnesses. Windows commands, IPC events, and DOM APIs were mocked; no actual Windows process was killed, and the packaged Electron application was not started. “Reproduced with mocks” must not be confused with “reproduced on Windows.” No penetration test, full dependency vulnerability scan, package installation, or signed-binary review was performed.
 
@@ -397,13 +398,24 @@ For each test run record:
 | Entire tracked source mapped | **Complete** | Current tree, app code, config, README and lockfile read |
 | Mock-reproduced bug evidence | **Complete for selected cases** | S01–S11, R01–R05, I01 |
 | Requirements gap matrix | **Complete (static)** | FR-01–FR-17 mapped to code |
-| Windows runtime defect reproduction | **DEFERRED / NOT PASSED** | See WT-01–WT-08 in DEFERRED_WINDOWS_TESTING.md |
+| Windows runtime defect reproduction | **PARTIAL / ISSUES REPORTED** | WT-01/02 FAIL, WT-03 NOT IMPLEMENTED reported on 2026-10-31; WT-04+ not run |
 | Windows performance benchmark | **DEFERRED / NOT PASSED** | WT-09; synthetic call counts only |
 | Dependency vulnerability scan | **DEFERRED / NOT PASSED** | WT-11; lock reviewed only |
 | Installer/portable smoke test | **DEFERRED / NOT PASSED** | WT-10; no Windows binary built or started |
 | Security validation/pentest | **DEFERRED / NOT PASSED** | WT-07/08; security boundary inspected, no penetration test |
-| Phase 2 fully complete | **NO** | Windows tests explicitly deferred by owner; cannot close Phase 2 until evidence is recorded |
+| Phase 2 fully complete | **NO** | Initial failures/feature gaps reported; retests, remaining Windows evidence, and release checks outstanding |
 | Public executable release gate | **FAIL** | Safety and feature requirements not yet met |
+
+## H.2 First Windows run reported — 2026-10-31
+
+**Provenance:** Project owner reported results from a Codex-assisted Windows audit. The full original Markdown report and raw terminal evidence have not been inspected in this audit update. Treat findings as **reported, not independently verified**. The [triage record](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md) records the necessary reproduction and environment checks.
+
+- **WT-01 — FAIL (reported):** WMIC absent. CIM and NetTCP PowerShell queries returned Access denied; permission/sandbox cause unresolved.
+- **WT-02 — FAIL (reported):** netstat correctly identified a disposable listener's port/address/PID, but Port Manager displayed the owner as Unknown. Investigate WMIC/tasklist metadata fallback; do not yet attribute failure to one specific component.
+- **WT-03 — NOT IMPLEMENTED (reported):** Some PID/name/path data available; creation identity, parent PID, descendants, and command line missing.
+- **Safety:** No app code changed, no existing processes terminated per the owner's report.
+- **Remaining:** Rerun WT-01–WT-03 after investigating compatibility/metadata and implementing missing features; WT-04–WT-12 remain deferred and relevant process-identity/stop guardrails must precede destructive tests.
+- **Consequence:** Reinforces PM-A10 and PM-A18 priorities; does not demonstrate an OS-wide API incompatibility or release readiness.
 
 ## H.1 Deferred testing decision — 2026-10-30
 
