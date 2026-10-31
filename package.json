@@ -6,6 +6,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --enable-logging",
+    "test": "node --test",
+    "check:syntax": "node --check main.js && node --check preload.js && node --check src/services/portService.js && node --check src/services/portReference.js && node --check src/renderer/safeMarkup.js && node --check src/renderer/app.js",
     "build": "electron-builder --win",
     "build:portable": "electron-builder --win portable"
   },

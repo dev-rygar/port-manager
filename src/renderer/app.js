@@ -1,3 +1,4 @@
+const { escapeHtml, getProcessActionLabel } = window.PortManagerSafeMarkup;
 const tableBody = document.getElementById('table-body');
 const searchInput = document.getElementById('search');
 const refreshBtn = document.getElementById('refresh');
@@ -145,7 +146,7 @@ function renderTable(data) {
         </div>
       </td>
       <td>
-        <button class="btn btn-danger kill-btn" data-pid="${p.pid}" data-name="${escapeHtml(p.applicationName || p.processName)}">Kill</button>
+        <button class="btn btn-danger kill-btn" data-pid="${p.pid}">Kill</button>
       </td>
     </tr>
   `;
@@ -156,7 +157,9 @@ function renderTable(data) {
   document.querySelectorAll('.kill-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      handleKill(parseInt(btn.dataset.pid, 10), btn.dataset.name);
+      const pid = parseInt(btn.dataset.pid, 10);
+      const process = portsData.find((item) => item.pid === pid);
+      handleKill(pid, getProcessActionLabel(process));
     });
   });
 
@@ -259,7 +262,7 @@ function renderDevTab() {
                 <span class="port">${p.port}</span>
                 ${escapeHtml(p.applicationName || '—')} · PID ${p.pid}
               </span>
-              <button class="btn btn-danger kill-btn" data-pid="${p.pid}" data-name="${escapeHtml(p.applicationName || p.processName)}">Kill</button>
+              <button class="btn btn-danger kill-btn" data-pid="${p.pid}">Kill</button>
             </div>
           `
             )
@@ -280,7 +283,9 @@ function renderDevTab() {
   devGroups.querySelectorAll('.kill-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      handleKill(parseInt(btn.dataset.pid, 10), btn.dataset.name);
+      const pid = parseInt(btn.dataset.pid, 10);
+      const process = portsData.find((item) => item.pid === pid);
+      handleKill(pid, getProcessActionLabel(process));
     });
   });
 
@@ -306,10 +311,15 @@ function renderCurrentTab() {
   }
 }
 
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
+function metadataStatusLabel(status) {
+  return {
+    available: 'Available',
+    partial: 'Partial (name only)',
+    'permission-denied': 'Unavailable (permission denied)',
+    'command-unavailable': 'Unavailable (tool missing)',
+    'process-exited': 'Process exited or was not found',
+    unavailable: 'Unavailable',
+  }[status] || 'Unavailable';
 }
 
 function showDetails(p) {
@@ -319,6 +329,7 @@ function showDetails(p) {
   document.getElementById('detail-port').textContent = p.port;
   document.getElementById('detail-desc').textContent = p.portDescription || '—';
   document.getElementById('detail-path').textContent = p.processPath || '(not available)';
+  document.getElementById('detail-meta').textContent = metadataStatusLabel(p.processMetadataStatus);
   detailsPanel.classList.remove('hidden');
 }
 
