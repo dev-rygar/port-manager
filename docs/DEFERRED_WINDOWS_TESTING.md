@@ -64,6 +64,18 @@ The owner reports a subsequent **local, uncommitted, unpushed** remediation docu
 
 **Meaning of READY FOR REVIEW:** The remediation can be submitted for *source review*. It is **not** approved, merged, demonstrated on Windows end-to-end, or safe for process termination. Phase 2 remains open: WT-01 and WT-02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED.
 
+### 2026-11-01 — Draft GitHub PR #6 independently source-reviewed
+
+The M2 code/reports are now available in [draft PR #6](https://github.com/dev-rygar/port-manager/pull/6) at commit `1e77fc8eb1816d073d46cb13eab2473ea983a23b`. An independent **source review**, recorded in [PR #6 conversation](https://github.com/dev-rygar/port-manager/pull/6#issuecomment-6548909082), verified the shell-free discovery PID handoff, status classification, and renderer `data-name` removal; it also identified **CHANGES REQUIRED before merge**:
+
+- Serial `powershell.exe` metadata lookups for up to 64 PIDs have 3-second per-command timeouts but no overall refresh deadline; they can block discovery for many seconds/minutes.
+- Netstat has no explicit process timeout/output configuration; TCP/UDP parser scope is inconsistent and distinct address bindings are collapsed.
+- Metadata status `available` can be set when `creationTime` is unavailable; this must not serve as verified process-instance identity.
+- This PR derives from `main` and **does not contain** M0 PR #4 or stacked M1.1 PR #5. Merging PR #6 as-is could preserve the original unsafe raw-PID termination path instead of the guarded M1.1 path.
+- Local 11/11 mocked tests were reported passing; **no GitHub Actions run** was found for the PR #6 head during the review. Live WT-02 listener/PID verification is still inconclusive.
+
+**No source was merged or modified by this review.** Current Windows test statuses remain **WT-01 FAIL / BLOCKED; WT-02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED**. All termination/release gates are still open.
+
 ## 2. Deferred test register
 
 | ID | Deferred activity | What completion must demonstrate | Status |
