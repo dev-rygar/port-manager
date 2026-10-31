@@ -423,12 +423,13 @@ For each test run record:
 
 **Provenance:** Project owner reported results from a Codex-assisted Windows audit. The full original Markdown report and raw terminal evidence have not been inspected in this audit update. Treat findings as **reported, not independently verified**. The [triage record](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md) records the necessary reproduction and environment checks.
 
-- **WT-01 — FAIL / BLOCKED (reported):** WMIC absent; CIM and NetTCP APIs present but access denied in non-elevated Codex shell. General Windows capability and ordinary-shell permissions still need verification.
+- **WT-01 — FAIL / BLOCKED (reported):** WMIC absent; CIM and Get-NetTCPConnection are installed but both explicitly returned `Access denied` in **ordinary non-elevated PowerShell**, not just Codex. Specific account/policy cause is unknown.
 - **WT-02 — FAIL / BLOCKED (reported):** netstat correctly identified disposable listener port/address/PID. WMIC missing; tasklist fallback returned `ERROR: Access denied`, service silently swallowed the failure into an empty map, and `getPorts()` assigned `Unknown`. This is an actionable error handling/metadata path defect (PM-A10, PM-A14).
 - **WT-03 — NOT IMPLEMENTED / BLOCKED (reported):** Some PID/name/path data available; creation identity, parent PID, descendants, and command line missing (PM-A18).
 - **Safety:** No app code changed, no existing processes terminated per the owner's report.
 - **Non-cause:** PowerShell execution policy limited `npm.ps1` but did not cause the process metadata failures; no justification for changing execution policy.
-- **Remaining:** Test normal non-elevated PowerShell separately from Codex context, replace WMIC dependency, surface permission/metadata errors rather than silently using Unknown, implement missing process fields, and rerun WT-01–WT-03. WT-04–WT-12 remain deferred; safety gates precede destructive tests.
+- **Additional 2026-10-31 evidence:** In ordinary non-elevated PowerShell, `tasklist` and `Get-Process` identified the shell's own PID, while separately formatted `Get-CimInstance Win32_Process -Filter "ProcessId = $PID"` and `Get-NetTCPConnection -State Listen` returned `Access denied`. These are real observed access restrictions in that environment, **not** universal incompatibility across all Windows installations.
+- **Remaining:** Avoid treating CIM/NetTCP as unconditional dependencies or using elevation to bypass restrictions. Implement least-privilege metadata with explicit permission/unknown states; continue identity-safe stop contract before runtime destructive tests. Rerun WT-01–WT-03 after fixes. WT-04–WT-12 remain deferred.
 - **Consequence:** Reinforces PM-A10 and PM-A18 priorities; does not demonstrate an OS-wide API incompatibility or release readiness.
 
 ## I. Source/reference notes
