@@ -76,6 +76,16 @@ The M2 code/reports are now available in [draft PR #6](https://github.com/dev-ry
 
 **No source was merged or modified by this review.** Current Windows test statuses remain **WT-01 FAIL / BLOCKED; WT-02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED**. All termination/release gates are still open.
 
+### 2026-11-01 — PR #6 merged into main (incremental, not acceptance)
+
+The owner explicitly authorized merging [PR #6](https://github.com/dev-rygar/port-manager/pull/6) despite open independent code-review follow-ups. The merge was completed using a head-SHA guard; GitHub reports commit `44cdc962c0fc0438cdbdf2b3b1ddc5b87f868466` on `main`.
+
+**Scope:** This integrates M2 read-only discovery, metadata error statuses, and renderer remediation into the default development branch. **It is not a completed M2 milestone or a production release sign-off**: the original unsafe `killProcess` path remains until M1.1/M1.2 integration, WT-02 live listener visibility was inconclusive, and GitHub CI for the PR was absent at merge. Remaining M2 findings: serial metadata calls can stall refresh (64 × 3s timeout), netstat lacks an explicit deadline, UDP scope and per-address endpoint fidelity are unsettled, and `available` does not imply process creation-time identity.
+
+**Immediate development priority:** Codex must plan and implement non-destructive integration of M0 PR #4 and M1.1 PR #5 onto updated main **without replacing the newer M2 discovery service or renderer safety improvements**. Review and run combined tests/CI before either further integration. M1.2 process-instance authorization, preview/revalidation and verification remains separately release-blocking. **Do not use the current Kill/Kill All actions for validation or production.**
+
+**Windows statuses unchanged:** WT-01 FAIL / BLOCKED; WT-02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED. WT-04–WT-12 deferred.
+
 ## 2. Deferred test register
 
 | ID | Deferred activity | What completion must demonstrate | Status |
