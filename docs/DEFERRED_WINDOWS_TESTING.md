@@ -30,6 +30,12 @@ The owner executed read-only commands in **normal, non-elevated PowerShell outsi
 
 **Subsequent explicit non-elevated PowerShell checks (2026-10-31) resolved the formatting ambiguity:** Both `Get-CimInstance Win32_Process` for the shell's own PID and `Get-NetTCPConnection -State Listen` separately returned **`Access denied`**. They are installed but blocked in this ordinary user context, not only in Codex. `tasklist` and `Get-Process` succeeded for the shell's own process. The exact Windows policy or ACL causing the denied calls remains unknown. **WT-01/02 stay FAIL / BLOCKED; WT-03 stays NOT IMPLEMENTED / BLOCKED.** More details are logged in the [triage note](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md).
 
+### Local M2 discovery improvement reported — 2026-10-31
+
+The owner reports a **local, uncommitted** `feature/windows-process-discovery` branch that replaces WMIC-based process-name lookup with a shell-free PowerShell `Get-Process` mechanism, retains `netstat.exe -ano` and a `tasklist` fallback, and introduces explicit metadata statuses (available, partial, permission-denied, command-unavailable, process-exited, unavailable). The owner also reports UI/readme updates, eight passing mocked tests, syntax and `git diff --check` passes. The implementation source/diff and the local [WINDOWS_DISCOVERY_IMPROVEMENT.md] report have **not** been uploaded or independently reviewed; no commit or push occurred.
+
+**WT-02 is not retested successfully:** a separate read-only probe did not observe the disposable listener from the reported cross-process session, so live listener/owner verification is **inconclusive**, not PASS. WT-01 remains FAIL/BLOCKED and WT-03 NOT IMPLEMENTED/BLOCKED. Review source/test provenance, test a persistent listener while running from the same environment, and validate without process termination before changing any WT result.
+
 ## 2. Deferred test register
 
 | ID | Deferred activity | What completion must demonstrate | Status |
