@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-11-01  
 **Status:** In development — **not production-ready**  
-**Current focus:** PR #6 independent source review completed — **CHANGES REQUESTED** for M2 performance, endpoint fidelity, integration and test gaps; M1.2 stop safety remains blocked  
-**Application baseline on main:** e4a1585cb7755c24a04140834d92d9a3754d28ee
+**Current focus:** PR #6 merged as incremental M2 work; urgent integration of M0 tests + M1.1 guards without regressing discovery, followed by M2 follow-ups and M1.2 termination safety  
+**Application baseline on main:** 44cdc962c0fc0438cdbdf2b3b1ddc5b87f868466 (PR #6 merge, 2026-11-01)
 
 This is the **central progress checklist** for development and release readiness. For *what* to build, use the [Master Plan](https://github.com/dev-rygar/port-manager/pull/1); for *how* and milestone scope, use the [Architecture & Roadmap](https://github.com/dev-rygar/port-manager/pull/3); for findings and test requirements, use the [Engineering Audit](https://github.com/dev-rygar/port-manager/pull/2).
 
@@ -16,12 +16,12 @@ This is the **central progress checklist** for development and release readiness
 | 1 — Master Plan | **Approved; PR unmerged** | Merge PR #1 |
 | 2 — In-depth audit | **Follow-up traced metadata failure: WT-01/02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED (owner report)** | Fix/verify metadata behavior, rerun WT-01–WT-03; WT-04–WT-12 deferred |
 | 3 — Architecture and roadmap | **Direction approved; OS choices provisional; PR unmerged** | Merge PR #3; finalize Windows-dependent decisions after testing |
-| 4 — Incremental implementation | **M0/M1.1 branches plus open draft PR #6 (M2), review changes requested** | Resolve M2 findings and integrate #4/#5 safely; M1.2, M3/M4 and live Windows tests pending |
+| 4 — Incremental implementation | **PR #6 merged to main (M2 incremental); PR #4/#5 still open** | Integrate M0/M1.1 without rolling back M2; fix M2 review issues and complete M1.2, M3/M4 and live Windows tests |
 | 5 — Production validation | **Not started** | Verify all safety, acceptance, and release gates |
 
 ## 2. GitHub PR integration tracker
 
-**Verified 2026-11-01:** All six PRs below are **open and unmerged**. PR #6 exists as a GitHub draft from main; it is not CI- or Windows-validated.
+**Verified 2026-11-01:** **PR #6 MERGED** at `44cdc962`; PRs #1–#5 remain **open/unmerged**. PR #6 merged without a GitHub Actions run for its head and without WT-02 live validation; production release remains blocked.
 
 | PR | Deliverable | GitHub state | Dependency |
 | --- | --- | --- | --- |
@@ -30,7 +30,7 @@ This is the **central progress checklist** for development and release readiness
 | [#3](https://github.com/dev-rygar/port-manager/pull/3) | Architecture, roadmap **and this tracker** | Ready / open | References PRs #1 and #2 |
 | [#4](https://github.com/dev-rygar/port-manager/pull/4) | M0 automated tests and CI | Draft / open | None |
 | [#5](https://github.com/dev-rygar/port-manager/pull/5) | M1.1 IPC/process guards | Ready / open | **Stacked on #4**; integrate #4 first |
-| [#6](https://github.com/dev-rygar/port-manager/pull/6) | M2 discovery and renderer remediation | **Draft / open; changes requested in independent review** | Diverged from #4/#5; review/fix M2 and preserve guarded termination during reconciliation |
+| [#6](https://github.com/dev-rygar/port-manager/pull/6) | M2 discovery and renderer remediation | **Merged to main 2026-11-01** (`44cdc962`) | Open review findings remain follow-up work, especially total refresh deadline and endpoint fidelity; DO NOT count as M2 sign-off |
 
 Documentation approvals were recorded by the owner in conversation / PR comments; these are not GitHub-approved reviews or merges.
 
@@ -41,7 +41,9 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Review/merge PR #3 (including this tracker).
 - [ ] Review/merge M0 PR #4 after checking latest CI.
 - [ ] Retarget/rebase and merge M1.1 PR #5 after #4; rerun CI.
-- [ ] Resolve PR #6 source-review findings, preserve guarded backend behavior, reconcile branch dependencies and run combined CI; **do not merge as-is**.
+- [x] Merge [PR #6](https://github.com/dev-rygar/port-manager/pull/6) into main as an explicitly **incomplete M2 increment**. Merge commit `44cdc962`; no CI or Windows smoke validation claimed.
+- [ ] Resolve [PR #6 review findings](https://github.com/dev-rygar/port-manager/pull/6#issuecomment-6548909082) in follow-up work on top of main; bound metadata refresh; explicit TCP/UDP scope and netstat timeout; preserve bindings; clarify metadata completeness.
+- [ ] Integrate PR #4 and PR #5 safely against main **now containing #6**, preserving newer discovery implementation and existing M1.1 protections; no blind cherry-picks or conflict resolutions.
 - [ ] Reconcile status in this tracker against main after each integration.
 
 ## 3. Phase 1 — Approved Master Plan
@@ -135,7 +137,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ### M2 — Windows discovery and process relationships
 
-**Local development history — reported 2026-10-31 to 2026-11-01:** The earlier entries below describe the pre-PR local snapshots. **Current remote state:** PR #6 was pushed at commit `1e77fc8eb1816d073d46cb13eab2473ea983a23b` and independently source-reviewed on 2026-11-01.
+**Local development history — reported 2026-10-31 to 2026-11-01:** Earlier entries describe pre-merge snapshots. **Current remote state:** PR #6 commit `1e77fc8` was merged to main as `44cdc962` on 2026-11-01. Independent source review findings remain unresolved.
 
 **2026-11-01 remediation follow-up — owner reports READY FOR REVIEW:**
 - [x] Remove dynamic renderer `data-name` attributes and add safe escaping/tests; verify implementation in independent review.
@@ -173,7 +175,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Test permissions, missing metadata, process churn and latency on Windows.
 - [ ] Decide and document TCP-only vs explicitly supported UDP for v1.
 
-**State:** **DRAFT PR #6 OPEN, CHANGES REQUESTED after independent source review (2026-11-01)**. Renderer/PID remediation verified in source, but metadata lookup performance, netstat behavior, address fidelity and identity-completeness statuses need attention. 11 local mocks reportedly passed; no PR #6 CI run; live WT-02 inconclusive. Raw-PID termination is a separate release blocker until M1.2; PR #6 must not overwrite PR #5 guards during integration.
+**State:** **M2 PR #6 MERGED into main 2026-11-01 — INCOMPLETE / FOLLOW-UP REQUIRED.** Renderer/PID remediation verified in source, but serial metadata performance, netstat timeout/TCP-UDP behavior, address fidelity and identity completeness need correction. Only 11 locally reported mocked passes; no PR #6 CI; live WT-02 inconclusive. Current main STILL has baseline raw-PID stop behavior; M1.2 remains mandatory. Reconcile PR #4/#5 without discarding M2 code.
 
 ### M3 — Simple developer workflow and features
 
@@ -214,12 +216,13 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order
 
-1. **Resolve PR #6 review findings:** bound total discovery time, handle UDP/TCP scope and netstat timeout, preserve distinct listener addresses, and clarify creation-time/metadata status semantics with tests.
-2. **Integrate in safe order when approved:** #4 M0 foundation → #5 M1.1 guards → reconcile revised #6 M2 without restoring raw-PID `killProcess`. Run combined syntax, mocks and GitHub CI.
+1. **Immediate integration plan for Codex:** build a dedicated branch from updated main (`44cdc962`), identify and reconcile test/guard work from PR #4 then PR #5, preserve PR #6 discovery and renderer fixes, and convert legacy M0 WMIC/exec mocks to the modern execFile metadata contract. No unapproved merge or destructive test.
+2. **Run integrated automated coverage and review carefully:** preserve protected-target/IPC sender guards from #5, add test coverage around new listener/metadata states and refuse unsafe raw PIDs; do not claim full M1.2 based on #5.
 3. **Investigate WT-02 in normal Windows context:** persistent disposable listener accepted a client but neither OS `netstat` nor app showed LISTENING; preserve blocked status until repeatable end-to-end evidence.
 4. **Complete doc PR integrations** #1 → #2 → #3 under separate merge approval; reconcile tracker after each merge.
-5. **Keep M1.2 as its own release-blocking safety workstream:** privileged backend authorization based on process-instance identity, impact preview, revalidation and post-stop verification. The M2 patch is read-only discovery progress, not an authorization to terminate PIDs.
-6. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
+5. **Address post-merge M2 review findings in a targeted Codex task:** set a real total refresh deadline and command bounds; preserve per-address listener fidelity; document TCP-only or implement/test UDP; encode creation-time completeness precisely; add tests and CI.
+6. **Keep M1.2 as its own release-blocking safety workstream:** privileged backend authorization based on process-instance identity, impact preview, revalidation and post-stop verification. The M2 merge is read-only discovery progress, not an authorization to terminate PIDs.
+7. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
 
 **Important:** Do not add automatic killing or broaden bulk-termination behavior while identity and permission safety remain unresolved.
 
