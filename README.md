@@ -29,7 +29,7 @@ A Windows desktop app to view, manage, and kill processes using network ports. B
 
 ## Prerequisites
 
-- **Windows 10/11** – Uses `netstat`, `wmic`, `taskkill`
+- **Windows 10/11** – Uses `netstat` for listeners and best-effort `Get-Process`/`tasklist` metadata; no administrator privileges are required for basic discovery
 - **Node.js 18+** – For running from source or building
 
 ---
@@ -115,7 +115,7 @@ npm run build:portable
 
 - **Electron** – Desktop app
 - **Vanilla JS** – No frontend framework
-- **Windows APIs** – `netstat`, `wmic`, `taskkill`, PowerShell (for process metadata)
+- **Windows APIs** – `netstat`, `Get-Process`, optional `tasklist`, `taskkill`, PowerShell (for process metadata)
 
 ---
 
