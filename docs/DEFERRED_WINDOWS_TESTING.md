@@ -36,6 +36,20 @@ The owner reports a **local, uncommitted** `feature/windows-process-discovery` b
 
 **WT-02 is not retested successfully:** a separate read-only probe did not observe the disposable listener from the reported cross-process session, so live listener/owner verification is **inconclusive**, not PASS. WT-01 remains FAIL/BLOCKED and WT-03 NOT IMPLEMENTED/BLOCKED. Review source/test provenance, test a persistent listener while running from the same environment, and validate without process termination before changing any WT result.
 
+### 2026-11-01 — Local discovery code review: CHANGES REQUIRED
+
+**Provenance:** Project owner relayed Codex's local `WINDOWS_DISCOVERY_REVIEW_2026-11-01.md` findings. The local report, source diff, and raw test evidence are **not uploaded here**, so these are reported review observations, not independent GitHub code review. The local `feature/windows-process-discovery` branch remains **uncommitted and unpushed**.
+
+- **Critical stop authorization blocker:** The local code's `killProcess` can still force-terminate a raw PID without validating process-instance identity or metadata state. Neither a reported `available` metadata state nor integration of the partial M1.1 checks alone proves a safe stop contract. Do not run or publish destructive actions until the privileged backend has a reviewed, fail-closed identity/preview/revalidation/verification path.
+- **Command construction:** The PowerShell `execFile` call has timeout and avoids the Node shell, but interpolates a numeric PID inside a `-Command` script. Confirm canonical numeric validation at every entry point and consider fixed-script parameterized arguments to minimize interpolation.
+- **Renderer:** Existing `data-name` attribute interpolation is still vulnerable to improper quote escaping; use safe DOM APIs and targeted regression tests.
+- **PR integration:** `package.json` and `portService.js` overlap the unmerged M0 PR #4 and stacked M1.1 PR #5. Preserve local changes; plan conflict resolution before committing or rebasing.
+- **Live WT-02 smoke:** Disposable test listener accepted a client connection, but both `netstat` and the application showed no listening row during the separate probe. This is **inconclusive**, not a listener-discovery pass; investigate timing/state/filter/context.
+- **Mocked checks:** Syntax, eight tests (8/8), and `git diff --check` were reported PASS, but do not validate privileged termination or live Windows discovery.
+- **Safety:** No process termination, elevation, install, commit, push or merge was performed, per owner report.
+
+**Statuses unchanged:** WT-01 FAIL / BLOCKED; WT-02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED. WT-04–WT-12 remain deferred and release gates open. The next work is safety review and isolated read-only listener reproduction, **not** running termination tests.
+
 ## 2. Deferred test register
 
 | ID | Deferred activity | What completion must demonstrate | Status |
