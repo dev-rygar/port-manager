@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-01  
 **Status:** In development — **not production-ready**  
-**Current focus:** Local M2 remediation **READY FOR REVIEW** (owner/Codex report only); independent code review, integration, and live Windows discovery still pending  
+**Current focus:** PR #6 independent source review completed — **CHANGES REQUESTED** for M2 performance, endpoint fidelity, integration and test gaps; M1.2 stop safety remains blocked  
 **Application baseline on main:** e4a1585cb7755c24a04140834d92d9a3754d28ee
 
 This is the **central progress checklist** for development and release readiness. For *what* to build, use the [Master Plan](https://github.com/dev-rygar/port-manager/pull/1); for *how* and milestone scope, use the [Architecture & Roadmap](https://github.com/dev-rygar/port-manager/pull/3); for findings and test requirements, use the [Engineering Audit](https://github.com/dev-rygar/port-manager/pull/2).
@@ -16,12 +16,12 @@ This is the **central progress checklist** for development and release readiness
 | 1 — Master Plan | **Approved; PR unmerged** | Merge PR #1 |
 | 2 — In-depth audit | **Follow-up traced metadata failure: WT-01/02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED (owner report)** | Fix/verify metadata behavior, rerun WT-01–WT-03; WT-04–WT-12 deferred |
 | 3 — Architecture and roadmap | **Direction approved; OS choices provisional; PR unmerged** | Merge PR #3; finalize Windows-dependent decisions after testing |
-| 4 — Incremental implementation | **M0/M1.1 branches; local M2 discovery remediation reported READY FOR REVIEW** | Independent source review and PR integration; M1.2 safety, M2 live discovery, M3/M4 pending |
+| 4 — Incremental implementation | **M0/M1.1 branches plus open draft PR #6 (M2), review changes requested** | Resolve M2 findings and integrate #4/#5 safely; M1.2, M3/M4 and live Windows tests pending |
 | 5 — Production validation | **Not started** | Verify all safety, acceptance, and release gates |
 
 ## 2. GitHub PR integration tracker
 
-**Verified 2026-10-31:** All five PRs below remain **open and unmerged**. Only the original application code is on main.
+**Verified 2026-11-01:** All six PRs below are **open and unmerged**. PR #6 exists as a GitHub draft from main; it is not CI- or Windows-validated.
 
 | PR | Deliverable | GitHub state | Dependency |
 | --- | --- | --- | --- |
@@ -30,6 +30,7 @@ This is the **central progress checklist** for development and release readiness
 | [#3](https://github.com/dev-rygar/port-manager/pull/3) | Architecture, roadmap **and this tracker** | Ready / open | References PRs #1 and #2 |
 | [#4](https://github.com/dev-rygar/port-manager/pull/4) | M0 automated tests and CI | Draft / open | None |
 | [#5](https://github.com/dev-rygar/port-manager/pull/5) | M1.1 IPC/process guards | Ready / open | **Stacked on #4**; integrate #4 first |
+| [#6](https://github.com/dev-rygar/port-manager/pull/6) | M2 discovery and renderer remediation | **Draft / open; changes requested in independent review** | Diverged from #4/#5; review/fix M2 and preserve guarded termination during reconciliation |
 
 Documentation approvals were recorded by the owner in conversation / PR comments; these are not GitHub-approved reviews or merges.
 
@@ -40,6 +41,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Review/merge PR #3 (including this tracker).
 - [ ] Review/merge M0 PR #4 after checking latest CI.
 - [ ] Retarget/rebase and merge M1.1 PR #5 after #4; rerun CI.
+- [ ] Resolve PR #6 source-review findings, preserve guarded backend behavior, reconcile branch dependencies and run combined CI; **do not merge as-is**.
 - [ ] Reconcile status in this tracker against main after each integration.
 
 ## 3. Phase 1 — Approved Master Plan
@@ -133,7 +135,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ### M2 — Windows discovery and process relationships
 
-**Local development checkpoint — reported 2026-10-31 to 2026-11-01 (uncommitted; Codex-reviewed locally, not independently source-reviewed here):**
+**Local development history — reported 2026-10-31 to 2026-11-01:** The earlier entries below describe the pre-PR local snapshots. **Current remote state:** PR #6 was pushed at commit `1e77fc8eb1816d073d46cb13eab2473ea983a23b` and independently source-reviewed on 2026-11-01.
 
 **2026-11-01 remediation follow-up — owner reports READY FOR REVIEW:**
 - [x] Remove dynamic renderer `data-name` attributes and add safe escaping/tests; verify implementation in independent review.
@@ -141,23 +143,25 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [x] Report **11/11 tests PASS**, syntax PASS, `git diff --check` PASS. No CI run or independent source review performed.
 - [x] Preserve unchanged `killProcess` and document raw-PID stop as separate **M1.2 safety/release blocker**, not a solved M2 discovery condition.
 - [x] Document integration guidance for overlapping unmerged PRs #4/#5.
-- [ ] Inspect complete diff and tests, including any untracked files and the local remediation report, before authorizing a commit/push/PR.
-- [ ] Review the environment-variable PID handoff for strict canonical validation, timeouts, failed lookups, and metadata-state correctness.
+- [x] Inspect PR #6's committed diff, source, tests and remediation report via GitHub. This does not include two older local-only/untracked Windows reports.
+- [ ] Follow up on [independent PR #6 review findings](https://github.com/dev-rygar/port-manager/pull/6#issuecomment-6548909082): sequential metadata lookups (up to 64 × 3s), netstat timeout/UDP semantics, distinct local bindings collapsed, and incomplete `available` status.
+- [x] Review PR #6's numeric PID-to-environment handoff and shell-free discovery command. Confirmed source construction; error states and tests are present, but total query duration and field-completeness semantics require changes.
 - [ ] Keep WT-02 smoke **INCONCLUSIVE / BLOCKED**: client connected to a disposable listener, but neither netstat nor app showed a LISTENING row. No successful end-to-end verification.
 
 
-- [x] Owner reports Codex created local branch `feature/windows-process-discovery` with an uncommitted discovery implementation (no remote PR).
+- [x] Owner previously created the local `feature/windows-process-discovery` branch; it has since been **committed and pushed** as draft PR #6.
 - [x] Owner reports replacing WMIC-first metadata with a shell-free PowerShell `Get-Process` adapter, retaining `netstat.exe -ano` listener data and `tasklist` fallback.
 - [x] Owner reports six explicit metadata states, UI display, README update, eight mocked regressions, and passing `npm.cmd run check:syntax`, `npm.cmd test` (8/8), and `git diff --check`. **These are reported results; GitHub code/CI review has not happened.**
 - [x] Owner reports local Codex review completed 2026-11-01 with **CHANGES REQUIRED**. PowerShell invocation reportedly uses `execFile` with timeout, but the numeric PID is still interpolated inside a `-Command` script; verify strict PID validation and prefer parameterized data passing.
-- [ ] Independently inspect actual local diff and validate subprocess timeout, PID validation, and shell-injection safety. No local source or review report imported here.
+- [x] Review PR #6 source diff and committed report independently on GitHub; identified bounded per-command timeouts but **unbounded total refresh duration**, plus other M2 issues. See [review comment](https://github.com/dev-rygar/port-manager/pull/6#issuecomment-6548909082).
 - [x] Owner reports Codex identified overlapping `package.json` and `portService.js` modifications with unmerged **PR #4** and **PR #5**; tests/stop guards are not integrated in the local branch.
 - [ ] Plan a non-destructive reconciliation against PR #4 and PR #5 while preserving all uncommitted changes. Merge/rebase only under a separately reviewed integration plan.
 - [ ] Reproduce an isolated, persistent TCP listener visible to a separate read-only `netstat` probe in the same user session and verify the exact PID/port in Port Manager. **2026-11-01 review remained inconclusive:** disposable listener accepted a connection but no listening row appeared in either `netstat` or app. Diagnose timing/filtering/environment without claiming PASS.
 - [x] Owner reports Codex found existing renderer `data-name` attribute quote-escaping injection risk; UI metadata state display alone is not an injection fix.
-- [ ] Fix and regression-test renderer attribute injection (prefer DOM APIs / `dataset` and `textContent` over HTML attribute interpolation).
+- [x] PR #6 removes unsafe process-derived `data-name` interpolation and adds renderer escaping/source tests (independent source review performed; broader DOM behavior verification remains a separate gate).
 - [ ] Block unsafe stop operations until the main-process backend enforces process-instance identity, protected-process policy, preview/revalidation and independent verification. **Local `killProcess` still accepts raw PIDs and force-terminates**; metadata statuses are NOT authorization.
-- [ ] Commit/push/open focused PR **only after explicit owner approval**, then verify CI; do not call M2 complete based on eight local mocks alone.
+- [x] Commit/push draft [PR #6](https://github.com/dev-rygar/port-manager/pull/6) for review; 11 local mocked tests reported passing.
+- [ ] Add/verify CI on the integrated branch; **no GitHub Actions run was found for PR #6 head SHA** as of this review.
 
 
 - [x] Trace **Codex-reported 2026-10-31 WT-02 metadata failure** to missing WMIC + access-denied tasklist fallback + swallowed error (no implementation fix yet).
@@ -169,7 +173,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Test permissions, missing metadata, process churn and latency on Windows.
 - [ ] Decide and document TCP-only vs explicitly supported UDP for v1.
 
-**State:** **READY FOR REVIEW per local Codex remediation report dated 2026-11-01**, not independently source-reviewed or integrated. Prior renderer/PID-script remediation is *reported* complete; raw-PID termination remains **separately unresolved** and M2 cannot authorize stopping. Local 11/11 mocks passed, but native cross-process listener verification remains inconclusive. No commit/push/remote PR/termination tests.
+**State:** **DRAFT PR #6 OPEN, CHANGES REQUESTED after independent source review (2026-11-01)**. Renderer/PID remediation verified in source, but metadata lookup performance, netstat behavior, address fidelity and identity-completeness statuses need attention. 11 local mocks reportedly passed; no PR #6 CI run; live WT-02 inconclusive. Raw-PID termination is a separate release blocker until M1.2; PR #6 must not overwrite PR #5 guards during integration.
 
 ### M3 — Simple developer workflow and features
 
@@ -210,10 +214,10 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order
 
-1. **Get an independent reviewable M2 patch and local remediation report** while preserving uncommitted/untracked work; do not commit, push, switch branches, or lose local changes.
-2. **Review reported M2 fixes:** renderer DOM/attribute safety, strict PID validation and child-environment passing, `execFile` timeout/error behavior, 11 tests, and no changed termination policy.
-3. **Investigate WT-02 separately:** explain why a disposable TCP listener accepted a client but neither OS `netstat` nor app showed LISTENING. Keep smoke test blocked until repeatable OS-side evidence.
-4. **Review and integrate existing PRs in dependency order** when explicitly authorized: docs #1 → #2 → #3; test foundation #4; stacked guards #5. Do not equate M1.1 with full identity-safe termination.
+1. **Resolve PR #6 review findings:** bound total discovery time, handle UDP/TCP scope and netstat timeout, preserve distinct listener addresses, and clarify creation-time/metadata status semantics with tests.
+2. **Integrate in safe order when approved:** #4 M0 foundation → #5 M1.1 guards → reconcile revised #6 M2 without restoring raw-PID `killProcess`. Run combined syntax, mocks and GitHub CI.
+3. **Investigate WT-02 in normal Windows context:** persistent disposable listener accepted a client but neither OS `netstat` nor app showed LISTENING; preserve blocked status until repeatable end-to-end evidence.
+4. **Complete doc PR integrations** #1 → #2 → #3 under separate merge approval; reconcile tracker after each merge.
 5. **Keep M1.2 as its own release-blocking safety workstream:** privileged backend authorization based on process-instance identity, impact preview, revalidation and post-stop verification. The M2 patch is read-only discovery progress, not an authorization to terminate PIDs.
 6. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
 
