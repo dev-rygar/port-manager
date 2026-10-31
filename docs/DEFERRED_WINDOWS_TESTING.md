@@ -50,6 +50,20 @@ The owner reports a **local, uncommitted** `feature/windows-process-discovery` b
 
 **Statuses unchanged:** WT-01 FAIL / BLOCKED; WT-02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED. WT-04–WT-12 remain deferred and release gates open. The next work is safety review and isolated read-only listener reproduction, **not** running termination tests.
 
+### 2026-11-01 — Local M2 remediation reported READY FOR REVIEW
+
+The owner reports a subsequent **local, uncommitted, unpushed** remediation documented in `WINDOWS_DISCOVERY_M2_REMEDIATION_2026-11-01.md` (report and code not uploaded here):
+
+- Renderer dynamic `data-name` attributes reportedly removed, with escaping and tests.
+- Numeric PowerShell PID reportedly passed through child process environment rather than script-string interpolation, with canonical PID checks; `execFile` and timeouts retained.
+- Local syntax, **11/11 automated tests**, and `git diff --check` reportedly passed.
+- `killProcess` deliberately **unchanged**; raw-PID destructive behavior remains an **independent M1.2 release blocker**.
+- Codex documented integration guidance for unmerged PRs #4 and #5.
+- Persistent listener reportedly accepted a connection but neither `netstat` nor Port Manager displayed the LISTENING row: **WT-02 cross-process validation remains INCONCLUSIVE / BLOCKED**.
+- No commit, push, merge, elevation, installation or process termination reported.
+
+**Meaning of READY FOR REVIEW:** The remediation can be submitted for *source review*. It is **not** approved, merged, demonstrated on Windows end-to-end, or safe for process termination. Phase 2 remains open: WT-01 and WT-02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED.
+
 ## 2. Deferred test register
 
 | ID | Deferred activity | What completion must demonstrate | Status |
