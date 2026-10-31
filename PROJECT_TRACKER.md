@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-31  
 **Status:** In development — **not production-ready**  
-**Current focus:** Phase 2 metadata discovery defect (WT-01/02), missing process metadata (WT-03), alongside Phase 4 M1 safety  
+**Current focus:** Review local M2 discovery prototype (not committed), resolve WT-02 live-listener uncertainty, and continue M1 safety  
 **Application baseline on main:** e4a1585cb7755c24a04140834d92d9a3754d28ee
 
 This is the **central progress checklist** for development and release readiness. For *what* to build, use the [Master Plan](https://github.com/dev-rygar/port-manager/pull/1); for *how* and milestone scope, use the [Architecture & Roadmap](https://github.com/dev-rygar/port-manager/pull/3); for findings and test requirements, use the [Engineering Audit](https://github.com/dev-rygar/port-manager/pull/2).
@@ -16,7 +16,7 @@ This is the **central progress checklist** for development and release readiness
 | 1 — Master Plan | **Approved; PR unmerged** | Merge PR #1 |
 | 2 — In-depth audit | **Follow-up traced metadata failure: WT-01/02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED (owner report)** | Fix/verify metadata behavior, rerun WT-01–WT-03; WT-04–WT-12 deferred |
 | 3 — Architecture and roadmap | **Direction approved; OS choices provisional; PR unmerged** | Merge PR #3; finalize Windows-dependent decisions after testing |
-| 4 — Incremental implementation | **In progress: M0 and M1.1 work on branches** | Integrate PRs #4 and #5; complete M1.2, M2, M3, M4 |
+| 4 — Incremental implementation | **M0/M1.1 GitHub branches; new M2 discovery prototype local/uncommitted** | Review/test local discovery, integrate PRs #4/#5, complete M1.2–M4 |
 | 5 — Production validation | **Not started** | Verify all safety, acceptance, and release gates |
 
 ## 2. GitHub PR integration tracker
@@ -133,6 +133,18 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ### M2 — Windows discovery and process relationships
 
+**Local development checkpoint — reported 2026-10-31 (not committed or independently code-reviewed):**
+
+- [x] Owner reports Codex created local branch `feature/windows-process-discovery` with an uncommitted discovery implementation (no remote PR).
+- [x] Owner reports replacing WMIC-first metadata with a shell-free PowerShell `Get-Process` adapter, retaining `netstat.exe -ano` listener data and `tasklist` fallback.
+- [x] Owner reports six explicit metadata states, UI display, README update, eight mocked regressions, and passing `npm.cmd run check:syntax`, `npm.cmd test` (8/8), and `git diff --check`. **These are reported results; GitHub code/CI review has not happened.**
+- [ ] Inspect actual local diff and check `execFile` invocation; `Get-Process` is a PowerShell cmdlet, not a standalone executable. Verify bounded execution, non-shell argument handling, and safe handling of all failure states.
+- [ ] Reconcile local branch against **unmerged PR #4** (M0 tests) and **PR #5** (M1.1 stop guards) without overwriting any edits; reconcile test coverage counts.
+- [ ] Reproduce a persistent disposable listener visible to a separate read-only `netstat` probe in the same user session and verify Port Manager resolves owner metadata. The first cross-process smoke test was **inconclusive**, not PASS.
+- [ ] Review renderer metadata presentation for HTML safety and verify identity uncertainty cannot authorize process termination.
+- [ ] Commit/push/open focused PR **only after explicit owner approval**, then verify CI; do not call M2 complete based on eight local mocks alone.
+
+
 - [x] Trace **Codex-reported 2026-10-31 WT-02 metadata failure** to missing WMIC + access-denied tasklist fallback + swallowed error (no implementation fix yet).
 - [ ] Evaluate metadata/ownership lookup options under the **confirmed normal-user permission limits**: `netstat` listener PID available, `tasklist` works for shell PID, CIM and Get-NetTCPConnection denied; test candidate APIs with disposable listener.
 - [ ] Replace WMIC dependency with a validated supported discovery/metadata approach.
@@ -142,7 +154,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Test permissions, missing metadata, process churn and latency on Windows.
 - [ ] Decide and document TCP-only vs explicitly supported UDP for v1.
 
-**State:** Not started. Exact OS adapter remains provisional.
+**State:** **Local, uncommitted prototype reported 2026-10-31**; implementation/diff not yet reviewed in GitHub, live listener-to-owner test inconclusive. Exact Windows adapter remains provisional.
 
 ### M3 — Simple developer workflow and features
 
@@ -183,9 +195,9 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order
 
-1. **Use confirmed least-privilege constraints for design:** normal PowerShell `tasklist` and `Get-Process` work for the shell PID, while CIM and NetTCP are denied; do not assume administrator elevation.
+1. **Review local M2 prototype before any commit:** verify branch base vs unmerged PRs #4/#5, inspect diff and regression coverage, ensure shell-safe subprocess calls and honest metadata states.
 2. **Preserve and review both local Windows reports:** share sanitized original evidence, exact tested commit, Windows build and permission context; do not confuse owner-reported roots with independently reviewed logs.
-3. **Implement focused, non-destructive process metadata fixes:** expose command-unavailable/access-denied metadata states without aborting `netstat` listener discovery, remove WMIC dependency, and add mocked regression coverage. Validate candidate normal-user metadata lookup with a disposable listener.
+3. **Validate discovery end-to-end:** use one persistent disposable local listener and query it while alive from the same normal-user context; compare netstat PID, metadata fallback, and UI, then retest WT-01–WT-03 without destructive actions.
 4. **Integrate existing PRs in dependency order:** documentation PRs #1 → #2 → #3; M0 test PR #4; stacked M1.1 safety PR #5, checking CI and merge context.
 5. **Continue M1.2 and M2 safety/discovery work:** validated process-instance identity, impact preview, termination result verification, and accurate metadata/relationships.
 6. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
