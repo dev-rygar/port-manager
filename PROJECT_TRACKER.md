@@ -64,7 +64,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [x] Receive Codex follow-up root-cause chain: **WMIC absent → tasklist Access denied → swallowed error → empty metadata map → Unknown name**. Netstat listener detection worked for the test case; PowerShell `npm.ps1` execution policy is unrelated.
 - [ ] Obtain/review sanitized full **initial and follow-up** reports, exact tested commit, Windows build, execution context, and command-level errors.
 - [x] Confirm `tasklist` and `Get-Process` can identify the user's own PowerShell process in a normal non-elevated terminal (2026-10-31, PID 20000); earlier Codex denial is environment-dependent in this example.
-- [ ] Isolate CIM and Get-NetTCPConnection in normal PowerShell with explicit formatting and errors; result of earlier combined output is inconclusive.
+- [x] Independently test CIM and Get-NetTCPConnection in ordinary non-elevated PowerShell (2026-10-31): both explicitly returned **Access denied**; this is not limited to Codex. Exact Windows policy/ACL cause remains unknown.
 - [ ] Test process metadata for a disposable listener from the actual Electron app in a non-elevated desktop session; avoid termination.
 - [ ] Make metadata failures explicit (permission denied, command unavailable, process exited) rather than silently appearing as `Unknown`.
 - [ ] Choose and validate a least-privilege metadata fallback not dependent on WMIC or requiring blanket elevation.
@@ -134,7 +134,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 ### M2 — Windows discovery and process relationships
 
 - [x] Trace **Codex-reported 2026-10-31 WT-02 metadata failure** to missing WMIC + access-denied tasklist fallback + swallowed error (no implementation fix yet).
-- [ ] Investigate permission differences between ordinary non-elevated Windows shell and Codex execution for `tasklist`, CIM, `Get-NetTCPConnection`, and candidate APIs.
+- [ ] Evaluate metadata/ownership lookup options under the **confirmed normal-user permission limits**: `netstat` listener PID available, `tasklist` works for shell PID, CIM and Get-NetTCPConnection denied; test candidate APIs with disposable listener.
 - [ ] Replace WMIC dependency with a validated supported discovery/metadata approach.
 - [ ] Preserve distinct TCP listening endpoints (address, port, protocol and owner).
 - [ ] Retrieve verified available process identity, path, command line, parent and descendants.
@@ -183,9 +183,9 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order
 
-1. **Finish the Windows API permission comparison:** normal PowerShell `tasklist` and `Get-Process` succeeded for the shell PID; isolate CIM/NetTCP and record errors explicitly.
+1. **Use confirmed least-privilege constraints for design:** normal PowerShell `tasklist` and `Get-Process` work for the shell PID, while CIM and NetTCP are denied; do not assume administrator elevation.
 2. **Preserve and review both local Windows reports:** share sanitized original evidence, exact tested commit, Windows build and permission context; do not confuse owner-reported roots with independently reviewed logs.
-3. **Implement focused, non-destructive process metadata fixes:** explicitly propagate `tasklist`/CIM access-denied diagnostics, avoid WMIC dependency, and add mocked regression coverage; choose fallback only after ordinary-shell verification.
+3. **Implement focused, non-destructive process metadata fixes:** expose command-unavailable/access-denied metadata states without aborting `netstat` listener discovery, remove WMIC dependency, and add mocked regression coverage. Validate candidate normal-user metadata lookup with a disposable listener.
 4. **Integrate existing PRs in dependency order:** documentation PRs #1 → #2 → #3; M0 test PR #4; stacked M1.1 safety PR #5, checking CI and merge context.
 5. **Continue M1.2 and M2 safety/discovery work:** validated process-instance identity, impact preview, termination result verification, and accurate metadata/relationships.
 6. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
