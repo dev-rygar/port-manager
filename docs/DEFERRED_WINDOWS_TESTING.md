@@ -28,13 +28,13 @@ The full initial and follow-up local reports are not accessible in this GitHub u
 
 The owner executed read-only commands in **normal, non-elevated PowerShell outside Codex**. `Get-Process` and `tasklist /FI "PID eq $myPid" /FO CSV /NH` successfully identified the shell's own PID (`20000`) and `powershell.exe`. This demonstrates `tasklist` **works in that context**, contrary to the access denial reported in the Codex session. The cause of the environment difference is not yet isolated.
 
-The combined console output for `Get-CimInstance` and `Get-NetTCPConnection` was ambiguous/blank, so neither is currently certified accessible outside Codex. Rerun each command separately with explicit error handling and formatting. **WT-01 and WT-02 remain FAIL / BLOCKED**, and WT-03 NOT IMPLEMENTED / BLOCKED. More details are logged in the [triage note](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md).
+**Subsequent explicit non-elevated PowerShell checks (2026-10-31) resolved the formatting ambiguity:** Both `Get-CimInstance Win32_Process` for the shell's own PID and `Get-NetTCPConnection -State Listen` separately returned **`Access denied`**. They are installed but blocked in this ordinary user context, not only in Codex. `tasklist` and `Get-Process` succeeded for the shell's own process. The exact Windows policy or ACL causing the denied calls remains unknown. **WT-01/02 stay FAIL / BLOCKED; WT-03 stays NOT IMPLEMENTED / BLOCKED.** More details are logged in the [triage note](test-results/WT01-WT03_REPORTED_TRIAGE_2026-10-31.md).
 
 ## 2. Deferred test register
 
 | ID | Deferred activity | What completion must demonstrate | Status |
 | --- | --- | --- | --- |
-| WT-01 | Windows 10/11 compatibility matrix | Agreed supported editions/builds; app runs and discovers listeners with/without WMIC | **FAIL / BLOCKED (reported 2026-10-31)** — WMIC absent; CIM/NetTCP present but denied in Codex shell |
+| WT-01 | Windows 10/11 compatibility matrix | Agreed supported editions/builds; app runs and discovers listeners with/without WMIC | **FAIL / BLOCKED (2026-10-31)** — WMIC absent; CIM/NetTCP access denied even in ordinary non-elevated PowerShell |
 | WT-02 | Actual port and process discovery | Match sample TCP listeners and owning PIDs against Windows OS data; IPv4/IPv6/address fidelity | **FAIL / BLOCKED (reported 2026-10-31)** — netstat accurate for one listener; tasklist denied, app swallowed error and displayed Unknown |
 | WT-03 | Process metadata and relationships | Name, executable path, command line where permitted; parent/child relationships and missing-permission behavior | **NOT IMPLEMENTED / BLOCKED (reported 2026-10-31)** — creation identity, parent/descendants, command line missing; privileged context unresolved |
 | WT-04 | Single process stop and related ports | Controlled test process with multiple ports, preview of impact, stop result and post-stop listener state | Deferred |
