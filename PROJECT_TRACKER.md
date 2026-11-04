@@ -132,6 +132,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Support explicit deduplicated batch targets with individual results/partial failures.
 - [ ] Fix unknown-process mislabeling and unsafe HTML attribute interpolation.
 - [ ] Add passing security/identity regression tests and validate Windows-dependent behavior.
+- [ ] Resolve screenshot-confirmed PID 4 safety presentation: `System` must not be fabricated as `System.exe` by blanket `.exe` normalization; protected PID 4 must not show an actionable Kill control. Enforce refusal in backend/main IPC regardless of UI, and test it without terminating system processes. Screenshot evidence reported 2026-11-04; PR #5 protections remain unmerged.
 
 **State:** M1.1 is implemented on a branch; **M1.2 is not started**. A simple PID re-query is not sufficient proof against races.
 
