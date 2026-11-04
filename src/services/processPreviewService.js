@@ -133,6 +133,9 @@ function createProcessPreviewService({
 } = {}) {
   const previews = new Map();
   const activePreviewByBinding = new Map();
+  const latestRequestByBinding = new Map();
+  let requestGenerationCounter = 0;
+  let lifecycleGeneration = 0;
 
   function removePreview(token) {
     const preview = previews.get(token);
@@ -149,22 +152,47 @@ function createProcessPreviewService({
   }
 
   function invalidateAllPreviews() {
+    // A cleared token store alone cannot prevent an older awaited request
+    // from minting a new token after a reload or window destruction.
+    lifecycleGeneration += 1;
     previews.clear();
     activePreviewByBinding.clear();
+    latestRequestByBinding.clear();
   }
 
   async function previewStop(input, binding) {
     const request = validateRequest(input);
+    const previewBinding = bindingKey(binding);
+    const requestGeneration = ++requestGenerationCounter;
+    const startingLifecycle = lifecycleGeneration;
+
+    // A newer request takes precedence as soon as it starts, even when its
+    // discovery subsequently fails. No prior preview may authorize it.
+    latestRequestByBinding.set(previewBinding, requestGeneration);
+    const previousToken = activePreviewByBinding.get(previewBinding);
+    if (previousToken) removePreview(previousToken);
+
+    const isStale = () => lifecycleGeneration !== startingLifecycle ||
+      latestRequestByBinding.get(previewBinding) !== requestGeneration;
+    const staleResult = () => makeResult(
+      request,
+      'stalePreview',
+      'A newer preview request or a document change invalidated this preview; request a fresh preview.',
+      clock
+    );
+
     let snapshot;
     try {
       snapshot = await adapter.getSnapshot();
     } catch (error) {
+      if (isStale()) return staleResult();
       return makeResult(request, 'uncertain', 'Cannot determine current TCP listeners; no preview was authorized.', clock, {
         evidenceSource: 'netstat.exe -ano',
         errorCode: error?.code || 'DISCOVERY_FAILED',
         error: error?.message || 'TCP listener discovery failed',
       });
     }
+    if (isStale()) return staleResult();
 
     if (!snapshot || (snapshot.status && snapshot.status !== 'available')) {
       return makeResult(request, 'uncertain', 'Current TCP listener ownership is unknown; no preview was authorized.', clock, {
@@ -214,6 +242,7 @@ function createProcessPreviewService({
       const processMap = await adapter.getProcessInfo([selected.pid]);
       info = processMap?.get ? processMap.get(selected.pid) : processMap?.[selected.pid];
     } catch (error) {
+      if (isStale()) return staleResult();
       return makeResult(request, 'refused', 'Process metadata could not be read; process-instance identity is unverifiable.', clock, {
         evidenceSource: snapshot.evidenceSource || 'netstat.exe -ano',
         selectedEndpoint: endpointFromRow(selected),
@@ -222,6 +251,7 @@ function createProcessPreviewService({
         affectedEndpoints: [],
       });
     }
+    if (isStale()) return staleResult();
 
     if (!info || info.metadataStatus !== 'available' || !isValidCreationTime(info.creationTime) ||
         typeof info.name !== 'string' || !info.name.trim() || typeof info.path !== 'string' || !info.path.trim()) {
@@ -249,8 +279,10 @@ function createProcessPreviewService({
     try {
       relationships = normalizeRelationships(await adapter.getProcessRelationships(selected.pid, info));
     } catch (error) {
+      if (isStale()) return staleResult();
       relationships = normalizeRelationships({ status: 'unavailable', reason: error?.message || 'Relationship lookup failed' });
     }
+    if (isStale()) return staleResult();
     if (relationships.isSelfOrDescendant) {
       return makeResult(request, 'refused', 'The selected process is the Electron application or one of its descendants; preview is non-actionable.', clock, {
         evidenceSource: snapshot.evidenceSource || 'netstat.exe -ano',
@@ -281,10 +313,10 @@ function createProcessPreviewService({
     const affectedEndpoints = entries
       .filter((row) => row.state === 'LISTENING' && row.protocol === 'TCP' && row.pid === selected.pid)
       .map(endpointFromRow);
+    // No awaits follow this check: an older request cannot race a newer one
+    // between generation validation and token insertion in the main thread.
+    if (isStale()) return staleResult();
     removeExpired();
-    const previewBinding = bindingKey(binding);
-    const supersededToken = activePreviewByBinding.get(previewBinding);
-    if (supersededToken) removePreview(supersededToken);
     while (previews.size >= MAX_OUTSTANDING_PREVIEWS) {
       const oldestToken = previews.keys().next().value;
       if (!oldestToken) break;

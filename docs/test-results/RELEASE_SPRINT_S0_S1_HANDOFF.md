@@ -59,9 +59,17 @@ Baseline commands on `origin/main` completed before implementation:
 
 The remediation adds renderer request/selection generations, document-epoch lifecycle invalidation, exact endpoint matching, observation-mismatch refusal, bounded and superseding preview tokens, and labels that distinguish observed metadata from handle-verified identity. Destructive operations remain disabled.
 
+## Backend in-flight preview race remediation — 2026-11-05
+
+A per-binding request generation is now assigned at the **start** of each validated preview request. Newer requests immediately revoke previously issued tokens for their document. Earlier in-flight requests return `stalePreview` after asynchronous work rather than superseding tokens from newer requests. Document reload/closure invalidation advances a separate service-wide lifecycle generation, preventing requests started before invalidation from minting tokens later. The global token bound and single-use authorization remain intact.
+
+New non-destructive regression tests cover (1) an old metadata request finishing after a newer successful preview, (2) a pending snapshot finishing after document invalidation, and (3) a newer failed request revoking an existing token before its own response. No actual OS process was stopped.
+
+**Validation for this new commit:** GitHub CI pending; the previous verified baseline at `d0ba563` was **99 total / 83 passing / 16 TODO / 0 failing**. Do not claim the newly added tests passed until its own GitHub run completes.
+
 ## Validation
 
-Final local validation for this increment (observed after the PR #12 remediation):
+Previous PR #12 local validation (before this backend race remediation):
 
 - `npm.cmd run check:syntax` — PASS
 - `npm.cmd test` — PASS: 99 tests, 83 pass, 0 fail, 16 TODO

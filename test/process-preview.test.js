@@ -196,6 +196,131 @@ test('S1-03: document invalidation makes an otherwise live token stale', async (
   assert.equal(stale.status, 'stalePreview');
 });
 
+function deferredPreviewOperation() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+function previewTestAdapter(overrides = {}) {
+  const snapshot = {
+    status: 'available',
+    evidenceSource: 'mock netstat',
+    entries: [endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70000)],
+  };
+  const metadata = new Map([[70000, {
+    name: 'node.exe', path: 'C:\\node.exe', creationTime: CREATION_TIME, metadataStatus: 'available',
+  }]]);
+  return {
+    getSnapshot: async () => snapshot,
+    getProcessInfo: async () => metadata,
+    getProcessRelationships: async () => ({ status: 'unavailable', parent: null, descendants: [], isSelfOrDescendant: false }),
+    ...overrides,
+  };
+}
+
+test('S1-03: older in-flight metadata response cannot replace a newer completed preview token', async () => {
+  const metadataPending = deferredPreviewOperation();
+  const metadataStarted = deferredPreviewOperation();
+  let lookupCount = 0;
+  const adapter = previewTestAdapter({
+    getProcessInfo: async () => {
+      if (++lookupCount === 1) {
+        metadataStarted.resolve();
+        return metadataPending.promise;
+      }
+      return new Map([[70000, { name: 'node.exe', path: 'C:\\node.exe', creationTime: CREATION_TIME, metadataStatus: 'available' }]]);
+    },
+  });
+  const service = createProcessPreviewService({ adapter });
+  const binding = { sessionId: 'window-a', documentEpoch: 1 };
+  const request = { port: 3000, localAddress: '127.0.0.1' };
+  const requestA = service.previewStop(request, binding);
+  await metadataStarted.promise;
+  const resultB = await service.previewStop(request, binding);
+  assert.equal(resultB.status, 'preview-ready');
+
+  metadataPending.resolve(new Map([[70000, {
+    name: 'node.exe', path: 'C:\\node.exe', creationTime: CREATION_TIME, metadataStatus: 'available',
+  }]]));
+  const resultA = await requestA;
+  assert.equal(resultA.status, 'stalePreview');
+  assert.equal(resultA.actionable, false);
+  assert.equal('preview' in resultA, false);
+  assert.equal(service.authorizePreview({ token: resultB.preview.token }, binding).status, 'authorized-preview');
+});
+
+test('S1-03: reload invalidates a pending snapshot so it cannot mint a new preview token', async () => {
+  const pendingSnapshot = deferredPreviewOperation();
+  const snapshotStarted = deferredPreviewOperation();
+  const snapshot = {
+    status: 'available', evidenceSource: 'mock netstat',
+    entries: [endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70000)],
+  };
+  let snapshotCalls = 0;
+  const service = createProcessPreviewService({
+    adapter: previewTestAdapter({
+      getSnapshot: () => {
+        if (++snapshotCalls === 1) {
+          snapshotStarted.resolve();
+          return pendingSnapshot.promise;
+        }
+        return Promise.resolve(snapshot);
+      },
+    }),
+  });
+  const binding = { sessionId: 'window-a', documentEpoch: 1 };
+  const request = { port: 3000, localAddress: '127.0.0.1' };
+  const pending = service.previewStop(request, binding);
+  await snapshotStarted.promise;
+  service.invalidateAllPreviews();
+  pendingSnapshot.resolve(snapshot);
+  const invalidated = await pending;
+  assert.equal(invalidated.status, 'stalePreview');
+  assert.equal('preview' in invalidated, false);
+
+  // A new document can request its own fresh token after the old one was invalidated.
+  const newBinding = { sessionId: 'window-a', documentEpoch: 2 };
+  const current = await service.previewStop(request, newBinding);
+  assert.equal(current.status, 'preview-ready');
+  assert.equal(service.authorizePreview({ token: current.preview.token }, binding).status, 'stalePreview');
+  assert.equal(service.authorizePreview({ token: current.preview.token }, newBinding).status, 'authorized-preview');
+});
+
+test('S1-03: a new failing request immediately revokes the prior issued preview token', async () => {
+  const failedSnapshot = deferredPreviewOperation();
+  const nextSnapshotStarted = deferredPreviewOperation();
+  let snapshotCalls = 0;
+  const adapter = previewTestAdapter({
+    getSnapshot: () => {
+      if (++snapshotCalls === 1) {
+        return Promise.resolve({
+          status: 'available', evidenceSource: 'mock netstat',
+          entries: [endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70000)],
+        });
+      }
+      nextSnapshotStarted.resolve();
+      return failedSnapshot.promise;
+    },
+  });
+  const service = createProcessPreviewService({ adapter });
+  const binding = { sessionId: 'window-a', documentEpoch: 1 };
+  const request = { port: 3000, localAddress: '127.0.0.1' };
+  const prior = await service.previewStop(request, binding);
+  assert.equal(prior.status, 'preview-ready');
+  const newer = service.previewStop(request, binding);
+  await nextSnapshotStarted.promise;
+
+  // The first token must be stale before the new request finishes.
+  assert.equal(service.authorizePreview({ token: prior.preview.token }, binding).status, 'stalePreview');
+  failedSnapshot.reject(new Error('netstat timed out'));
+  const failed = await newer;
+  assert.equal(failed.status, 'uncertain');
+  assert.equal('preview' in failed, false);
+  assert.equal(service.authorizePreview({ token: prior.preview.token }, binding).status, 'stalePreview');
+});
+
 test('S1-04: ambiguous ownership and failed discovery remain explicit', async () => {
   const ambiguous = createFixture({ entries: [
     endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70000),
