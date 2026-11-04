@@ -28,6 +28,42 @@
       </nav>
 
     <main class="main">
+      <section class="check-port" aria-labelledby="check-port-title">
+        <div class="check-port-heading">
+          <div>
+            <h2 id="check-port-title">Check a port</h2>
+            <p>Inspect one TCP address independently of the All Ports snapshot.</p>
+          </div>
+          <span class="muted">No bind test runs during refresh.</span>
+        </div>
+        <form id="check-port-form" class="check-port-form">
+          <label>Port <input id="check-port" type="number" min="1" max="65535" step="1" required inputmode="numeric" placeholder="5173"></label>
+          <label>Local address
+            <select id="check-address">
+              <option value="127.0.0.1">127.0.0.1 (IPv4 loopback)</option>
+              <option value="0.0.0.0">0.0.0.0 (all IPv4)</option>
+              <option value="::1">::1 (IPv6 loopback)</option>
+              <option value="::">:: (all IPv6)</option>
+            </select>
+          </label>
+          <button id="check-port-submit" class="btn btn-primary" type="submit">Check</button>
+        </form>
+        <div id="port-diagnostic" class="diagnostic hidden" aria-live="polite">
+          <div class="diagnostic-header"><strong id="diagnostic-outcome"></strong><span id="diagnostic-time"></span></div>
+          <p id="diagnostic-reason"></p>
+          <p id="diagnostic-endpoint" class="diagnostic-endpoint"></p>
+          <p class="diagnostic-evidence">Evidence: <span id="diagnostic-evidence"></span></p>
+          <p id="diagnostic-context" class="diagnostic-context"></p>
+          <div id="diagnostic-owner" class="diagnostic-owner hidden"></div>
+          <div class="diagnostic-actions">
+            <button id="probe-port" class="btn btn-primary" type="button">Test if port can be used</button>
+            <button id="alternative-port" class="btn btn-ghost" type="button">Find alternative port</button>
+            <button id="copy-port" class="btn btn-ghost hidden" type="button">Copy port</button>
+          </div>
+          <p class="diagnostic-note">The bind test briefly uses the selected port and only describes availability at that instant. It never stops a process.</p>
+        </div>
+      </section>
+
       <div id="loading" class="loading hidden">
         <span class="spinner"></span>
         <span>Loading ports...</span>
@@ -74,9 +110,11 @@
         <p><strong>Process:</strong> <span id="detail-name"></span></p>
         <p><strong>PID:</strong> <span id="detail-pid"></span></p>
         <p><strong>Port:</strong> <span id="detail-port"></span></p>
+        <p><strong>Local address:</strong> <span id="detail-local"></span></p>
         <p><strong>Description:</strong> <span id="detail-desc"></span></p>
         <p><strong>Path:</strong> <span id="detail-path" class="mono"></span></p>
         <p><strong>Metadata:</strong> <span id="detail-meta"></span></p>
+        <p><strong>Stop safety:</strong> <span id="detail-identity"></span></p>
       </div>
     </div>
   </div>

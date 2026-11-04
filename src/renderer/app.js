@@ -13,6 +13,18 @@ const tabAllContent = document.getElementById('tab-all-content');
 const tabDevContent = document.getElementById('tab-dev-content');
 const devEmpty = document.getElementById('dev-empty');
 const devGroups = document.getElementById('dev-groups');
+const checkPortForm = document.getElementById('check-port-form');
+const checkPortInput = document.getElementById('check-port');
+const checkAddressInput = document.getElementById('check-address');
+const diagnosticPanel = document.getElementById('port-diagnostic');
+const diagnosticOutcome = document.getElementById('diagnostic-outcome');
+const diagnosticTime = document.getElementById('diagnostic-time');
+const diagnosticReason = document.getElementById('diagnostic-reason');
+const diagnosticEvidence = document.getElementById('diagnostic-evidence');
+const diagnosticOwner = document.getElementById('diagnostic-owner');
+const probePortBtn = document.getElementById('probe-port');
+const alternativePortBtn = document.getElementById('alternative-port');
+const copyPortBtn = document.getElementById('copy-port');
 
 const STORAGE_KEY = 'port-manager-tags';
 const DEV_TAGS = ['backend', 'frontend', 'database'];
@@ -30,6 +42,7 @@ let portsData = [];
 let sortColumn = 'port';
 let sortAsc = true;
 let activeTab = 'all';
+let lastDiagnostic = null;
 
 // Tag storage
 function getTags() {
@@ -120,6 +133,18 @@ function sortPorts(data) {
   });
 }
 
+function canRequestStop(process) {
+  if (!process || process.pid === 4 || process.processMetadataStatus !== 'available') return false;
+  const name = String(process.processName || '').toLowerCase();
+  return !['system', 'system idle process', 'registry', 'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe', 'lsass.exe', 'lsaiso.exe', 'services.exe', 'svchost.exe', 'dwm.exe', 'sihost.exe', 'fontdrvhost.exe', 'explorer.exe', 'runtimebroker.exe', 'searchhost.exe', 'startmenuexperiencehost.exe', 'spoolsv.exe', 'conhost.exe'].includes(name);
+}
+
+function stopButton(process) {
+  const disabled = !canRequestStop(process);
+  const title = disabled ? 'Stopping is disabled until process identity is verified' : 'Stop this verified process';
+  return `<button class="btn btn-danger kill-btn" data-pid="${process.pid}" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''}>Stop</button>`;
+}
+
 function renderTable(data) {
   const filtered = filterPorts(data);
   const sorted = sortPorts(filtered);
@@ -146,7 +171,7 @@ function renderTable(data) {
         </div>
       </td>
       <td>
-        <button class="btn btn-danger kill-btn" data-pid="${p.pid}">Kill</button>
+        ${stopButton(p)}
       </td>
     </tr>
   `;
@@ -157,6 +182,7 @@ function renderTable(data) {
   document.querySelectorAll('.kill-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (btn.disabled) return;
       const pid = parseInt(btn.dataset.pid, 10);
       const process = portsData.find((item) => item.pid === pid);
       handleKill(pid, getProcessActionLabel(process));
@@ -247,11 +273,12 @@ function renderDevTab() {
     if (items.length === 0) return '';
 
     const pids = items.map((i) => i.pid);
+    const canStopAll = items.every(canRequestStop);
     return `
       <div class="dev-group" data-tag="${tag}">
         <div class="dev-group-header">
           <h3 class="dev-group-title">${tag.charAt(0).toUpperCase() + tag.slice(1)}</h3>
-          <button class="btn btn-danger kill-all-btn" data-pids="${pids.join(',')}" data-tag="${tag}">Kill all ${tag.charAt(0).toUpperCase() + tag.slice(1)}</button>
+          <button class="btn btn-danger kill-all-btn" data-pids="${pids.join(',')}" data-tag="${tag}" ${canStopAll ? '' : 'disabled'} title="${canStopAll ? 'Stop verified processes in this group' : 'Stopping is disabled until every process identity is verified'}">Stop all ${tag.charAt(0).toUpperCase() + tag.slice(1)}</button>
         </div>
         <div class="dev-group-items">
           ${items
@@ -262,7 +289,7 @@ function renderDevTab() {
                 <span class="port">${p.port}</span>
                 ${escapeHtml(p.applicationName || '—')} · PID ${p.pid}
               </span>
-              <button class="btn btn-danger kill-btn" data-pid="${p.pid}">Kill</button>
+              ${stopButton(p)}
             </div>
           `
             )
@@ -283,6 +310,7 @@ function renderDevTab() {
   devGroups.querySelectorAll('.kill-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (btn.disabled) return;
       const pid = parseInt(btn.dataset.pid, 10);
       const process = portsData.find((item) => item.pid === pid);
       handleKill(pid, getProcessActionLabel(process));
@@ -330,11 +358,104 @@ function showDetails(p) {
   document.getElementById('detail-desc').textContent = p.portDescription || '—';
   document.getElementById('detail-path').textContent = p.processPath || '(not available)';
   document.getElementById('detail-meta').textContent = metadataStatusLabel(p.processMetadataStatus);
+  const detailLocal = document.getElementById('detail-local');
+  if (detailLocal) detailLocal.textContent = p.localAddress || '(not available)';
+  const detailIdentity = document.getElementById('detail-identity');
+  if (detailIdentity) detailIdentity.textContent = p.processMetadataStatus === 'available' ? 'Verified for this snapshot only' : 'Not verified; stopping disabled';
   detailsPanel.classList.remove('hidden');
 }
 
 function hideDetails() {
   detailsPanel.classList.add('hidden');
+}
+
+function diagnosticRequest() {
+  const port = Number(checkPortInput.value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Enter a port number from 1 to 65535.');
+  return { port, protocol: 'TCP', localAddress: checkAddressInput.value || '127.0.0.1' };
+}
+
+function renderDiagnostic(result) {
+  lastDiagnostic = result;
+  diagnosticPanel.classList.remove('hidden');
+  diagnosticOutcome.textContent = result.outcome || 'Cannot determine';
+  diagnosticTime.textContent = result.checkedAt ? new Date(result.checkedAt).toLocaleTimeString() : '';
+  diagnosticReason.textContent = result.reason || 'No additional explanation was provided.';
+  const endpoint = document.getElementById('diagnostic-endpoint');
+  if (endpoint) endpoint.textContent = result.listener
+    ? `TCP ${result.listener.localAddress || `${result.localAddress}:${result.listener.port || result.port}`}${result.listener.pid ? ` (PID ${result.listener.pid})` : ''}`
+    : '';
+  diagnosticEvidence.textContent = result.evidenceSource || 'No evidence source available';
+  const context = document.getElementById('diagnostic-context');
+  if (context) {
+    const nonListening = result.context?.nonListening?.map((entry) => `${entry.state} at ${entry.localAddress}`).join(', ');
+    const excluded = result.context?.excludedRanges;
+    const excludedText = excluded?.status === 'available' && excluded.ranges?.length
+      ? `Excluded-range context: ${excluded.ranges.map((range) => `${range.start}-${range.end}`).join(', ')}`
+      : excluded?.status === 'unavailable' ? 'Excluded-range context unavailable.' : '';
+    context.textContent = [nonListening ? `Non-listening context: ${nonListening}` : '', excludedText].filter(Boolean).join(' ');
+  }
+  diagnosticOwner.classList.add('hidden');
+  diagnosticOwner.textContent = '';
+  if (result.process && result.process.metadataStatus === 'available') {
+    diagnosticOwner.textContent = `Verified owner for this snapshot: ${result.process.name || 'Unknown'}${result.listener?.pid ? ` (PID ${result.listener.pid})` : ''}`;
+    diagnosticOwner.classList.remove('hidden');
+  } else if (result.outcome === 'Listening') {
+    diagnosticOwner.textContent = 'A listener was observed, but its process identity could not be verified.';
+    diagnosticOwner.classList.remove('hidden');
+  }
+  probePortBtn.classList.toggle('hidden', result.outcome === 'Available at check time');
+  copyPortBtn.classList.add('hidden');
+}
+
+async function handleCheckPort(event) {
+  event.preventDefault();
+  try {
+    const result = await window.portManager.checkPort(diagnosticRequest());
+    renderDiagnostic(result);
+  } catch (err) {
+    showError(err.message || 'Unable to check the port');
+  }
+}
+
+async function handleProbePort() {
+  try {
+    const result = await window.portManager.probePort(diagnosticRequest());
+    renderDiagnostic(result);
+    if (result.outcome === 'Available at check time') {
+      copyPortBtn.classList.remove('hidden');
+      copyPortBtn.dataset.port = String(result.port);
+    }
+  } catch (err) {
+    showError(err.message || 'Unable to run the temporary bind probe');
+  }
+}
+
+async function handleAlternativePort() {
+  alternativePortBtn.disabled = true;
+  try {
+    const result = await window.portManager.findAlternativePort(diagnosticRequest());
+    if (result.candidate) {
+      renderDiagnostic(result.candidate);
+      diagnosticReason.textContent = `${result.candidate.guidance} Available at check time only.`;
+      copyPortBtn.classList.remove('hidden');
+      copyPortBtn.dataset.port = String(result.candidate.port);
+    } else {
+      renderDiagnostic({ ...result, reason: 'No candidate could be established during the bounded search.' });
+    }
+  } catch (err) {
+    showError(err.message || 'Unable to find an alternative port');
+  } finally {
+    alternativePortBtn.disabled = false;
+  }
+}
+
+async function copyDiagnosticPort() {
+  const port = copyPortBtn.dataset.port;
+  if (!port || !navigator.clipboard) return;
+  await navigator.clipboard.writeText(port);
+  copyPortBtn.textContent = 'Copied';
+  setTimeout(() => { copyPortBtn.textContent = 'Copy port'; }, 1200);
 }
 
 async function handleKill(pid, processName) {
@@ -408,5 +529,9 @@ document.querySelectorAll('.port-table th[data-sort]').forEach((th) => {
 searchInput.addEventListener('input', () => renderCurrentTab());
 refreshBtn.addEventListener('click', loadPorts);
 detailsClose.addEventListener('click', hideDetails);
+checkPortForm.addEventListener('submit', handleCheckPort);
+probePortBtn.addEventListener('click', handleProbePort);
+alternativePortBtn.addEventListener('click', handleAlternativePort);
+copyPortBtn.addEventListener('click', copyDiagnosticPort);
 
 loadPorts();

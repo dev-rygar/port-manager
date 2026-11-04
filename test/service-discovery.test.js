@@ -166,3 +166,38 @@ test('discovery: netstat listener data is preserved when metadata is denied and 
   assert.equal(rows[0].applicationName, 'Unknown process');
   assert.equal(rows[0].portService, 'Dev server');
 });
+
+test('discovery: metadata concurrency is capped and deadline returns timeout statuses', async () => {
+  let active = 0;
+  let maxActive = 0;
+  const runner = async (file) => {
+    if (file === 'powershell.exe') {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      active -= 1;
+      return { stdout: JSON.stringify({ id: 1, name: 'node', path: 'C:\\node.exe' }) };
+    }
+    return { stdout: '' };
+  };
+
+  const info = await getProcessInfo([1, 2, 3, 4, 5, 6, 7, 8], runner, { deadlineAt: Date.now() + 40 });
+
+  assert.ok(maxActive <= 4);
+  assert.equal(info.size, 8);
+  assert.ok([...info.values()].some((value) => value.metadataStatus === 'timeout'));
+});
+
+test('discovery: listener rows survive a metadata deadline', async () => {
+  const runner = async (file) => {
+    if (file === 'netstat.exe') return { stdout: 'TCP 127.0.0.1:5173 0.0.0.0:0 LISTENING 4321\r\n' };
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return { stdout: JSON.stringify({ id: 4321, name: 'node', path: 'C:\\node.exe' }) };
+  };
+
+  const rows = await getPorts({ commandRunner: runner, deadlineMs: 40 });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].port, 5173);
+  assert.equal(rows[0].processMetadataStatus, 'timeout');
+});
