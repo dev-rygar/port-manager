@@ -50,7 +50,9 @@ test('S1-01/S1-02: preview derives exact identity and includes all same-instance
 
   assert.equal(result.status, 'preview-ready');
   assert.equal(result.actionable, false);
-  assert.deepEqual(result.target.identity, { pid: 70000, creationTime: CREATION_TIME });
+  assert.deepEqual(result.target.observedIdentity, { pid: 70000, creationTime: CREATION_TIME });
+  assert.equal(result.target.identityStatus, 'observed-subsequent-metadata');
+  assert.equal(result.target.executionAuthority, false);
   assert.equal(result.target.processName, 'node.exe');
   assert.equal(result.selectedEndpoint.localAddress, '127.0.0.1:3000');
   assert.deepEqual(result.affectedEndpoints.map((item) => item.port), [3000, 3001]);
@@ -59,6 +61,58 @@ test('S1-01/S1-02: preview derives exact identity and includes all same-instance
   assert.equal(result.relationships.isSelfOrDescendant, false);
   assert.equal(result.relationships.descendants[0].pid, 70001);
   assert.equal(result.preview.oneTime, true);
+});
+
+test('S1-01: a wildcard listener cannot substitute for the exact selected endpoint', async () => {
+  const fixture = createFixture({ entries: [endpoint('0.0.0.0:3000', '0.0.0.0', 3000, 70001)] });
+  const result = await fixture.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, { sessionId: 'window-a' });
+  assert.equal(result.status, 'uncertain');
+  assert.match(result.reason, /No matching LISTENING socket/);
+  assert.equal(result.actionable, false);
+  assert.equal('preview' in result, false);
+});
+
+test('S1-01: an exact listener cannot substitute for a selected wildcard endpoint', async () => {
+  const fixture = createFixture({ entries: [endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70001)] });
+  const result = await fixture.service.previewStop({ port: 3000, localAddress: '0.0.0.0' }, { sessionId: 'window-a' });
+  assert.equal(result.status, 'uncertain');
+  assert.match(result.reason, /No matching LISTENING socket/);
+  assert.equal(result.actionable, false);
+  assert.equal('preview' in result, false);
+});
+
+test('S1-01: exact listener succeeds when both exact and wildcard share the same verified owner PID', async () => {
+  const fixture = createFixture({ entries: [
+    endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70000),
+    endpoint('0.0.0.0:3000', '0.0.0.0', 3000, 70000),
+  ] });
+  const result = await fixture.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, { sessionId: 'window-a' });
+  assert.equal(result.status, 'preview-ready');
+  assert.equal(result.selectedEndpoint.localAddress, '127.0.0.1:3000');
+  assert.equal(result.target.observedIdentity.pid, 70000);
+});
+
+test('S1-01: a changed observation is uncertain and never becomes execution authority', async () => {
+  const pid = 70000;
+  const adapter = {
+    getSnapshot: async () => ({
+      status: 'available',
+      observationId: 'listener-observation-1',
+      evidenceSource: 'mock netstat',
+      entries: [endpoint('127.0.0.1:3000', '127.0.0.1', 3000, pid)],
+    }),
+    getProcessInfo: async () => new Map([[pid, {
+      name: 'node.exe', path: 'C:\\node.exe', creationTime: CREATION_TIME,
+      metadataStatus: 'available', observationId: 'process-observation-2',
+    }]]),
+    getProcessRelationships: async () => ({ status: 'unavailable', isSelfOrDescendant: false }),
+  };
+  const service = createProcessPreviewService({ adapter });
+  const result = await service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, { sessionId: 'window-a' });
+  assert.equal(result.status, 'uncertain');
+  assert.equal(result.identityStatus, 'observation-mismatch');
+  assert.equal(result.actionable, false);
+  assert.equal('preview' in result, false);
 });
 
 test('S1-01/S1-04: incomplete metadata refuses a non-actionable preview', async () => {
@@ -120,10 +174,32 @@ test('S1-03: preview authorization is one-time, short-lived, and bound to its wi
   assert.equal(expired.status, 'stalePreview');
 });
 
+test('S1-03/S1-04: a newer preview supersedes the older token for the same document', async () => {
+  const fixture = createFixture();
+  const binding = { sessionId: 'window-a', frameId: 1 };
+  const older = await fixture.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, binding);
+  const newer = await fixture.service.previewStop({ port: 3001, localAddress: '0.0.0.0' }, binding);
+
+  const stale = fixture.service.authorizePreview({ token: older.preview.token }, binding);
+  assert.equal(stale.status, 'stalePreview');
+  const current = fixture.service.authorizePreview({ token: newer.preview.token }, binding);
+  assert.equal(current.status, 'authorized-preview');
+  assert.equal(current.target.pid, 70000);
+});
+
+test('S1-03: document invalidation makes an otherwise live token stale', async () => {
+  const fixture = createFixture();
+  const binding = { sessionId: 'window-a', documentEpoch: 1 };
+  const result = await fixture.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, binding);
+  fixture.service.invalidateAllPreviews();
+  const stale = fixture.service.authorizePreview({ token: result.preview.token }, binding);
+  assert.equal(stale.status, 'stalePreview');
+});
+
 test('S1-04: ambiguous ownership and failed discovery remain explicit', async () => {
   const ambiguous = createFixture({ entries: [
     endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70000),
-    endpoint('0.0.0.0:3000', '0.0.0.0', 3000, 70001),
+    endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70001),
   ] });
   const ambiguousResult = await ambiguous.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, { sessionId: 'window-a' });
   assert.equal(ambiguousResult.status, 'refused');

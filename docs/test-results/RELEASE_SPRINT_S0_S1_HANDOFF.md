@@ -9,7 +9,7 @@
 
 ## Scope and safety gate
 
-This increment implements a read-only process-instance identity and impact-preview slice. The main process derives ownership from a fresh TCP snapshot and complete process metadata; the renderer cannot supply an adapter, snapshot, PID, deadline, or policy override. The preview token is opaque, short-lived, one-time, and bound to the trusted window/session. Parent/child data, when available, is informational only.
+This increment implements a read-only observed-listener and impact-preview slice. The main process derives the candidate from a fresh TCP snapshot and complete process metadata; the renderer cannot supply an adapter, snapshot, PID, deadline, or policy override. The preview token is opaque, short-lived, one-time, document-bound, superseded per trusted document, and globally bounded. Parent/child data, when available, is informational only. S1 does not claim Windows-handle-verified process-instance identity.
 
 `DESTRUCTIVE_ACTIONS_ENABLED` remains `false`. No stop/execute IPC was added, no `taskkill` path is reachable from the new preview workflow, and no process termination test, elevation, or Windows configuration change was performed.
 
@@ -36,30 +36,35 @@ Baseline commands on `origin/main` completed before implementation:
 - `main.js` — registers read-only `ports:preview` and `ports:authorize-preview`; constructs sanitized requests and trusted-window binding.
 - `preload.js` — exposes `previewImpact` and `authorizePreview` without exposing Node or service dependencies.
 - `package.json` — includes `processPreviewService.js` in syntax checks.
-- `src/services/processPreviewService.js` — testable Windows adapter boundary, exact endpoint matching, creation-time identity, protected/ambiguous/unknown refusal, affected-listener preview, informational relationships, opaque one-time preview store, expiry and binding checks.
-- `docs/S1_PROCESS_IDENTITY_PREVIEW_DESIGN.md` — identity, token-binding, Windows-rights and limitation design note.
+- `src/services/processPreviewService.js` — testable Windows adapter boundary, exact endpoint matching, observed metadata correlation, protected/ambiguous/unknown refusal, affected-listener preview, informational relationships, bounded document-bound preview store, supersession, expiry and replay checks.
+- `main.js` — main-owned document epoch invalidation on top-level navigation/reload and window destruction.
+- `docs/S1_PROCESS_IDENTITY_PREVIEW_DESIGN.md` — observed-identity, token-binding, Windows-rights and limitation design note.
 - `src/renderer/index.html` — adds a disabled-by-default read-only impact-preview control and live result region.
-- `src/renderer/app.js` — requests a preview for the selected verified endpoint and renders affected listeners without offering a stop action.
-- `test/main-ipc-baseline.test.js` — verifies preview IPC whitelisting, trusted binding, and malformed payload refusal.
-- `test/process-preview.test.js` — verifies S1 identity, impact, authorization, expiry, replay, protected/PID-0, partial metadata, ambiguity, and discovery-failure behavior.
-- `test/renderer-baseline.test.js` — verifies the read-only impact preview renders affected endpoints and retains the disabled stopping message.
+- `src/renderer/app.js` — requests a preview for the selected observed endpoint and renders affected listeners without offering a stop action.
+- `test/main-ipc-baseline.test.js` — verifies preview IPC whitelisting, trusted binding, malformed payload refusal, same-URL reload invalidation and window-destruction invalidation.
+- `test/process-preview.test.js` — verifies observed identity, exact endpoint matching, observation mismatch, impact, authorization, expiry, replay, supersession, bounded storage, protected/PID-0, partial metadata, ambiguity, and discovery-failure behavior.
+- `test/renderer-baseline.test.js` — verifies the read-only impact preview renders affected endpoints, retains the disabled stopping message, and rejects delayed responses from stale selections/refreshes.
 - `docs/test-results/RELEASE_SPRINT_S0_S1_HANDOFF.md` — this evidence report.
 
 ### Expected versus observed behavior
 
 | Story | Happy-path expected | Observed | Unhappy/stale/permission expected | Observed |
 | --- | --- | --- | --- | --- |
-| S1-01 | Fresh listener + complete metadata yields PID, creation identity, endpoint and process path | PASS in injected adapter tests; identity is `{ pid, creationTime }` and endpoint tuple is retained | Missing/partial metadata or creation time is unverifiable | PASS: non-actionable `refused`, no token |
-| S1-02 | Preview lists every current TCP listener for the verified PID and selected endpoint | PASS: two same-PID listener endpoints are returned; `TIME_WAIT`/PID 0 is excluded | Different possible owners are not collapsed into one target | PASS: `refused` as ambiguous |
-| S1-03 | Trusted window receives opaque short-lived one-time handle | PASS: token returned, bound, expires, and is consumed once | Cross-window, replayed, expired, malformed or substituted payload is stale/rejected | PASS in service and IPC tests |
+| S1-01 | Fresh listener + complete metadata yields observed PID, process metadata, endpoint and process path | PASS in injected adapter tests; `observedIdentity` is retained with explicit non-handle-verified status and endpoint tuple | Missing/partial metadata, creation time, or changed observation is unverifiable | PASS: non-actionable `refused`/`uncertain`, no token |
+| S1-02 | Preview lists every current TCP listener for the observed PID and selected endpoint | PASS: two same-PID listener endpoints are returned; `TIME_WAIT`/PID 0 is excluded | Different possible owners are not collapsed into one target | PASS: `refused` as ambiguous |
+| S1-03 | Trusted document receives opaque short-lived one-time handle | PASS: token returned, bound to document epoch, expires, is superseded by a newer preview, and is consumed once | Cross-window, cross-document, replayed, expired, malformed or substituted payload is stale/rejected | PASS in service and IPC/lifecycle tests |
 | S1-04 | Ordinary complete metadata can be previewed for later review only | PASS: preview is non-actionable and explicitly says stopping is disabled | PID 0, PID 4, protected names, unknown/partial metadata, and failed discovery fail closed | PASS: refusal/uncertain states with no stop path |
+
+## PR #12 review remediation
+
+The remediation adds renderer request/selection generations, document-epoch lifecycle invalidation, exact endpoint matching, observation-mismatch refusal, bounded and superseding preview tokens, and labels that distinguish observed metadata from handle-verified identity. Destructive operations remain disabled.
 
 ## Validation
 
-Final local validation for this increment:
+Final local validation for this increment (observed after the PR #12 remediation):
 
 - `npm.cmd run check:syntax` — PASS
-- `npm.cmd test` — PASS: 90 tests, 74 pass, 0 fail, 16 TODO
+- `npm.cmd test` — PASS: 99 tests, 83 pass, 0 fail, 16 TODO
 - `git diff --check` — PASS
 
 All automated service, IPC, and renderer tests use mocks/in-memory DOMs. They do not prove native Windows identity or termination safety.
@@ -76,9 +81,9 @@ Remaining blockers:
 - The default read-only adapter conservatively refuses the current Electron process and matching executable path; reliable descendant ancestry still requires a future reviewed relationship adapter and is not used to authorize a stop.
 - Native Windows permission, process identity, address-family and packaging validation remain open.
 
-**Review verdict:** READY FOR INDEPENDENT REVIEW for this non-destructive S0/S1 increment, not merge approval and not release approval.
+**Review verdict:** READY FOR S1 RE-REVIEW for this non-destructive remediation, not merge approval and not release approval.
 
-**Next unblocked story:** S1 independent engineering review; after the preview contract is accepted, S2 mocked handle-bound stop/revalidation design can proceed with the feature gate still off. If S1 review blocks, S5 remains an independent non-destructive option.
+**Next unblocked story:** S1 re-review; after the preview contract is accepted, S2 mocked handle-bound stop/revalidation design can proceed with the feature gate still off. If S1 review blocks, S5 remains an independent non-destructive option.
 
 **Approval required before proceeding:** independent review of the identity/preview contract; separate explicit approval is required before any real termination test, feature-gate activation, merge, or release.
 

@@ -44,6 +44,13 @@ function createRendererHarness(initialRows) {
   let rows = initialRows;
   const calls = [];
   const previewCalls = [];
+  let previewImpactImplementation = async () => ({
+    status: 'preview-ready',
+    target: { pid: 1234, processName: 'node.exe', creationTime: '2026-11-04T00:00:00.000Z' },
+    selectedEndpoint: { protocol: 'TCP', localAddress: '127.0.0.1:3000', pid: 1234 },
+    affectedEndpoints: [{ protocol: 'TCP', localAddress: '127.0.0.1:3000', pid: 1234 }],
+    relationships: { status: 'available' },
+  });
   const document = {
     getElementById: get,
     querySelectorAll: () => [],
@@ -68,20 +75,14 @@ function createRendererHarness(initialRows) {
         calls.push(pid);
         throw new Error('Mocked kill is intentionally disabled in UI tests');
       },
-      previewImpact: async (request) => {
+      previewImpact: (request) => {
         previewCalls.push(request);
-        return {
-          status: 'preview-ready',
-          target: { pid: 1234, processName: 'node.exe', creationTime: '2026-11-04T00:00:00.000Z' },
-          selectedEndpoint: { protocol: 'TCP', localAddress: '127.0.0.1:3000', pid: 1234 },
-          affectedEndpoints: [{ protocol: 'TCP', localAddress: '127.0.0.1:3000', pid: 1234 }],
-          relationships: { status: 'available' },
-        };
+        return previewImpactImplementation(request);
       },
     },
   };
   const module = vm.runInNewContext(
-    source + '\n({loadPorts,renderTable,renderCurrentTab,renderDevTab,getTags,setTag,getTag,showDetails,filterPorts,renderDiagnostic,canRequestStop})',
+    source + '\n({loadPorts,renderTable,renderCurrentTab,renderDevTab,getTags,setTag,getTag,showDetails,hideDetails,filterPorts,renderDiagnostic,canRequestStop})',
     {
       document, window,
       localStorage: {
@@ -95,7 +96,23 @@ function createRendererHarness(initialRows) {
     },
     { filename: 'app.js' }
   );
-  return { app: module, get, storage, calls, previewCalls, setRows: (next) => { rows = next; } };
+  return { app: module, get, storage, calls, previewCalls, setRows: (next) => { rows = next; }, setPreviewImpact: (implementation) => { previewImpactImplementation = implementation; } };
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((value) => { resolve = value; });
+  return { promise, resolve };
+}
+
+function previewResult(pid, port) {
+  return {
+    status: 'preview-ready',
+    target: { pid, processName: 'node.exe', creationTime: '2026-11-04T00:00:00.000Z' },
+    selectedEndpoint: { protocol: 'TCP', localAddress: `127.0.0.1:${port}`, pid },
+    affectedEndpoints: [{ protocol: 'TCP', localAddress: `127.0.0.1:${port}`, pid }],
+    relationships: { status: 'available' },
+  };
 }
 
 const rows = [
@@ -155,7 +172,56 @@ test('renderer: read-only impact preview shows affected endpoints without enabli
   await h.get('preview-impact').listeners.click();
   assert.deepEqual(JSON.parse(JSON.stringify(h.previewCalls)), [{ port: 3000, protocol: 'TCP', localAddress: '127.0.0.1' }]);
   assert.match(h.get('impact-preview').textContent, /Affected listeners: TCP 127\.0\.0\.1:3000/);
-  assert.match(h.get('impact-preview').textContent, /Stopping remains disabled pending M1\.2/);
+  assert.match(h.get('impact-preview').textContent, /Process-instance identity is not Windows-handle-verified/);
+});
+
+test('renderer: delayed out-of-order previews cannot overwrite a new selection', async () => {
+  const h = createRendererHarness(rows);
+  const first = deferred();
+  const second = deferred();
+  let calls = 0;
+  h.setPreviewImpact(() => (calls++ === 0 ? first.promise : second.promise));
+  const processA = { ...rows[0], pid: 1111, localHost: '127.0.0.1', processMetadataStatus: 'available', processCreationTime: '2026-11-04T00:00:00.000Z' };
+  const processB = { ...rows[1], pid: 2222, localHost: '127.0.0.1', processMetadataStatus: 'available', processCreationTime: '2026-11-04T00:00:00.000Z' };
+
+  h.app.showDetails(processA);
+  const requestA = h.get('preview-impact').listeners.click();
+  h.app.showDetails(processB);
+  const requestB = h.get('preview-impact').listeners.click();
+  second.resolve(previewResult(2222, 5173));
+  await requestB;
+  assert.match(h.get('impact-preview').textContent, /PID 2222/);
+  assert.equal(h.get('preview-impact').disabled, false);
+
+  first.resolve(previewResult(1111, 3000));
+  await requestA;
+  assert.match(h.get('impact-preview').textContent, /PID 2222/);
+  assert.doesNotMatch(h.get('impact-preview').textContent, /PID 1111/);
+});
+
+test('renderer: closing or refreshing invalidates a pending preview response', async () => {
+  const h = createRendererHarness(rows);
+  const pending = deferred();
+  h.setPreviewImpact(() => pending.promise);
+  const selected = { ...rows[0], localHost: '127.0.0.1', processMetadataStatus: 'available', processCreationTime: '2026-11-04T00:00:00.000Z' };
+
+  h.app.showDetails(selected);
+  const request = h.get('preview-impact').listeners.click();
+  h.app.hideDetails();
+  pending.resolve(previewResult(1234, 3000));
+  await request;
+  assert.equal(h.get('impact-preview').classList.contains('hidden'), true);
+  assert.equal(h.get('impact-preview').textContent, '');
+
+  const refreshPending = deferred();
+  h.setPreviewImpact(() => refreshPending.promise);
+  h.app.showDetails(selected);
+  const refreshRequest = h.get('preview-impact').listeners.click();
+  await h.app.loadPorts();
+  refreshPending.resolve(previewResult(1234, 3000));
+  await refreshRequest;
+  assert.equal(h.get('impact-preview').classList.contains('hidden'), true);
+  assert.equal(h.get('impact-preview').textContent, '');
 });
 
 test('renderer: no-match search produces an empty All Ports table', async () => {

@@ -8,9 +8,15 @@ const { validateRequest, checkPort, probePort, findAlternativePort } = require('
 const { createProcessPreviewService } = require('./src/services/processPreviewService');
 
 let mainWindow;
+let documentEpoch = 0;
 const rendererPath = path.join(__dirname, 'src', 'renderer', 'index.html');
 const rendererUrl = pathToFileURL(rendererPath).href;
 const processPreviewService = createProcessPreviewService();
+
+function invalidatePreviewDocument() {
+  documentEpoch += 1;
+  processPreviewService.invalidateAllPreviews();
+}
 
 function createDiagnosticRequest(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -39,6 +45,7 @@ function trustedPreviewBinding() {
     sessionId: mainWindow?.webContents?.session?.id ?? 'main-session',
     frameId: mainWindow?.webContents?.mainFrame?.routingId ?? null,
     frameUrl: rendererUrl,
+    documentEpoch,
   };
 }
 
@@ -58,6 +65,14 @@ function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.on('closed', () => {
+    invalidatePreviewDocument();
+    mainWindow = null;
+  });
+  // A main-frame navigation includes same-URL reloads. New documents cannot reuse preview tokens.
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, _isInPlace, isMainFrame) => {
+    if (isMainFrame !== false) invalidatePreviewDocument();
+  });
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (url !== rendererUrl) event.preventDefault();
   });

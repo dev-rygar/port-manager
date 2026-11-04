@@ -17,18 +17,24 @@ function createMainHarness() {
   const calls = [];
   const diagnosticCalls = [];
   const previewCalls = [];
+  const lifecycle = { invalidations: 0 };
   let window = null;
 
   class FakeBrowserWindow {
     constructor(options) {
       this.options = options;
+      this.events = {};
       this.webContents = {
         mainFrame: { url: expectedUrl },
-        on(type, callback) { this[type] = callback; },
+        events: {},
+        on(type, callback) { this[type] = callback; this.events[type] = callback; },
+        emit(type, ...args) { this.events[type]?.(...args); },
         setWindowOpenHandler(callback) { this.windowOpenHandler = callback; },
       };
       window = this;
     }
+    on(type, callback) { this.events[type] = callback; }
+    emit(type, ...args) { this.events[type]?.(...args); }
     loadFile(value) { this.file = value; }
     once() {}
     show() {}
@@ -77,6 +83,7 @@ function createMainHarness() {
         createProcessPreviewService: () => ({
           previewStop: async (request, binding) => { previewCalls.push({ channel: 'preview', request, binding }); return { status: 'uncertain', ...request }; },
           authorizePreview: (payload, binding) => { previewCalls.push({ channel: 'authorize', payload, binding }); return { status: 'stalePreview' }; },
+          invalidateAllPreviews: () => { lifecycle.invalidations += 1; },
         }),
       };
     }
@@ -90,7 +97,7 @@ function createMainHarness() {
     process: { platform: 'win32' },
   }, { filename: 'main.js' });
   return {
-    handlers, calls, diagnosticCalls, previewCalls,
+    handlers, calls, diagnosticCalls, previewCalls, lifecycle,
     getWindow: () => window,
     trustedEvent: () => ({ sender: window.webContents, senderFrame: window.webContents.mainFrame }),
   };
@@ -202,9 +209,26 @@ test('IPC: preview strips renderer-owned internals and authorization binds to th
   await h.handlers.get('ports:authorize-preview')(trusted, { token: 'a'.repeat(64) });
 
   assert.deepEqual(JSON.parse(JSON.stringify(h.previewCalls)), [
-    { channel: 'preview', request: { port: 5173, protocol: 'TCP', localAddress: '127.0.0.1' }, binding: { webContentsId: 'main-window', sessionId: 'main-session', frameId: null, frameUrl: expectedUrl } },
-    { channel: 'authorize', payload: { token: 'a'.repeat(64) }, binding: { webContentsId: 'main-window', sessionId: 'main-session', frameId: null, frameUrl: expectedUrl } },
+    { channel: 'preview', request: { port: 5173, protocol: 'TCP', localAddress: '127.0.0.1' }, binding: { webContentsId: 'main-window', sessionId: 'main-session', frameId: null, frameUrl: expectedUrl, documentEpoch: 0 } },
+    { channel: 'authorize', payload: { token: 'a'.repeat(64) }, binding: { webContentsId: 'main-window', sessionId: 'main-session', frameId: null, frameUrl: expectedUrl, documentEpoch: 0 } },
   ]);
+});
+
+test('IPC: same-URL main-frame reload and window destruction invalidate document-bound previews', async () => {
+  const h = await readyHarness();
+  const trusted = h.trustedEvent();
+  await h.handlers.get('ports:preview')(trusted, { port: 5173, protocol: 'TCP', localAddress: '127.0.0.1' });
+  const first = h.previewCalls.at(-1).binding;
+
+  h.getWindow().webContents.emit('did-start-navigation', {}, expectedUrl, false, true);
+  await h.handlers.get('ports:preview')(trusted, { port: 5173, protocol: 'TCP', localAddress: '127.0.0.1' });
+  const second = h.previewCalls.at(-1).binding;
+  assert.equal(first.frameUrl, second.frameUrl);
+  assert.ok(second.documentEpoch > first.documentEpoch);
+  assert.equal(h.lifecycle.invalidations, 1);
+
+  h.getWindow().emit('closed');
+  assert.equal(h.lifecycle.invalidations, 2);
 });
 
 test('IPC: malformed preview and authorization payloads are rejected before service dispatch', async () => {

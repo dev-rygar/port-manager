@@ -47,6 +47,31 @@ let sortAsc = true;
 let activeTab = 'all';
 let lastDiagnostic = null;
 let selectedProcess = null;
+let impactPreviewGeneration = 0;
+
+function isPreviewEligible(process) {
+  return process?.processMetadataStatus === 'available' && process?.processCreationTime && Number(process?.pid) > 0;
+}
+
+function processSelectionKey(process) {
+  if (!process) return '';
+  return JSON.stringify({
+    pid: process.pid,
+    creationTime: process.processCreationTime || null,
+    port: process.port,
+    protocol: process.protocol,
+    localAddress: process.localHost || process.localAddress,
+  });
+}
+
+function invalidateImpactPreview() {
+  impactPreviewGeneration += 1;
+  if (impactPreview) {
+    impactPreview.textContent = '';
+    impactPreview.classList.add('hidden');
+  }
+  if (previewImpactBtn) previewImpactBtn.disabled = !isPreviewEligible(selectedProcess);
+}
 
 // Tag storage
 function getTags() {
@@ -74,6 +99,7 @@ function getTag(port) {
 }
 
 async function loadPorts() {
+  invalidateImpactPreview();
   showLoading(true);
   hideError();
 
@@ -361,6 +387,7 @@ function metadataStatusLabel(status) {
 
 function showDetails(p) {
   selectedProcess = p;
+  invalidateImpactPreview();
   document.getElementById('detail-app').textContent = p.applicationName || '—';
   document.getElementById('detail-name').textContent = p.processName || '—';
   document.getElementById('detail-pid').textContent = p.pid;
@@ -371,33 +398,34 @@ function showDetails(p) {
   const detailLocal = document.getElementById('detail-local');
   if (detailLocal) detailLocal.textContent = p.localAddress || '(not available)';
   const detailIdentity = document.getElementById('detail-identity');
-  if (detailIdentity) detailIdentity.textContent = p.processMetadataStatus === 'available' ? 'Metadata available; stopping disabled until M1.2 instance authorization' : 'Not verified; stopping disabled';
+  if (detailIdentity) detailIdentity.textContent = p.processMetadataStatus === 'available' ? 'Listener and process metadata observed; not Windows-handle-verified. Stopping disabled until M1.2.' : 'Process identity not verified; stopping disabled';
   if (previewImpactBtn) {
-    const eligible = p.processMetadataStatus === 'available' && p.processCreationTime && Number(p.pid) > 0;
+    const eligible = isPreviewEligible(p);
     previewImpactBtn.disabled = !eligible;
-    previewImpactBtn.title = eligible ? 'Show all listener endpoints for this verified process instance' : 'Complete process metadata is required for a read-only impact preview';
-  }
-  if (impactPreview) {
-    impactPreview.textContent = '';
-    impactPreview.classList.add('hidden');
+    previewImpactBtn.title = eligible ? 'Show all listener endpoints for this observed listener and subsequent process metadata' : 'Complete process metadata is required for a read-only impact preview';
   }
   detailsPanel.classList.remove('hidden');
 }
 
 function hideDetails() {
   selectedProcess = null;
+  invalidateImpactPreview();
   detailsPanel.classList.add('hidden');
 }
 
 async function handlePreviewImpact() {
   if (!selectedProcess || !window.portManager.previewImpact) return;
+  const requestedProcess = selectedProcess;
+  const requestedSelection = processSelectionKey(requestedProcess);
+  const requestGeneration = ++impactPreviewGeneration;
   previewImpactBtn.disabled = true;
   try {
     const result = await window.portManager.previewImpact({
-      port: selectedProcess.port,
-      protocol: selectedProcess.protocol,
-      localAddress: selectedProcess.localHost || selectedProcess.localAddress,
+      port: requestedProcess.port,
+      protocol: requestedProcess.protocol,
+      localAddress: requestedProcess.localHost || requestedProcess.localAddress,
     });
+    if (requestGeneration !== impactPreviewGeneration || processSelectionKey(selectedProcess) !== requestedSelection) return;
     impactPreview.classList.remove('hidden');
     if (result.status !== 'preview-ready') {
       impactPreview.textContent = result.reason || 'Impact preview is unavailable.';
@@ -410,12 +438,15 @@ async function handlePreviewImpact() {
     const relationshipNote = result.relationships?.status === 'available'
       ? 'Parent/child relationships are informational only and are not included as stop targets.'
       : 'Parent/child relationships are unavailable; no related process is inferred or included.';
-    impactPreview.textContent = `Verified ${result.target.processName || 'process'} PID ${result.target.pid} created ${result.target.creationTime}. Selected endpoint: ${selectedLabel}. Affected listeners: ${endpoints || 'none'}. ${relationshipNote} Stopping remains disabled pending M1.2.`;
+    impactPreview.textContent = `Observed listener and subsequent process metadata for ${result.target.processName || 'process'} PID ${result.target.pid} created ${result.target.creationTime}. Selected endpoint: ${selectedLabel}. Affected listeners: ${endpoints || 'none'}. Process-instance identity is not Windows-handle-verified. ${relationshipNote} Stopping remains disabled pending M1.2.`;
   } catch (err) {
+    if (requestGeneration !== impactPreviewGeneration || processSelectionKey(selectedProcess) !== requestedSelection) return;
     impactPreview.classList.remove('hidden');
     impactPreview.textContent = err.message || 'Impact preview is unavailable.';
   } finally {
-    previewImpactBtn.disabled = false;
+    if (requestGeneration === impactPreviewGeneration && processSelectionKey(selectedProcess) === requestedSelection) {
+      previewImpactBtn.disabled = false;
+    }
   }
 }
 

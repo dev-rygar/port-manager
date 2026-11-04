@@ -4,10 +4,11 @@ const crypto = require('crypto');
 const net = require('net');
 const path = require('path');
 const { getTcpSnapshot, getProcessInfo } = require('./portService');
-const { validateRequest, sameAddressScope } = require('./portDiagnosticService');
+const { validateRequest } = require('./portDiagnosticService');
 const { assertProcessCanBeStopped, isValidCreationTime } = require('./terminationPolicy');
 
 const PREVIEW_TTL_MS = 30_000;
+const MAX_OUTSTANDING_PREVIEWS = 64;
 
 function isOwnExecutable(info) {
   if (!info || typeof info.path !== 'string' || !info.path.trim() || !process.execPath) return false;
@@ -60,6 +61,7 @@ function bindingKey(binding = {}) {
     frameUrl: binding.frameUrl ?? null,
     frameId: binding.frameId ?? null,
     sessionId: binding.sessionId ?? null,
+    documentEpoch: binding.documentEpoch ?? null,
   });
 }
 
@@ -97,7 +99,8 @@ function compareCandidates(request, row) {
   const requestedFamily = net.isIP(request.localAddress);
   return row.protocol === request.protocol &&
     row.port === request.port &&
-    sameAddressScope({ host: request.localAddress, family: requestedFamily }, row);
+    requestedFamily === (row.addressFamily === 'IPv6' ? 6 : 4) &&
+    row.localHost === request.localAddress;
 }
 
 function sortCandidates(request, rows) {
@@ -129,12 +132,25 @@ function createProcessPreviewService({
   ttlMs = PREVIEW_TTL_MS,
 } = {}) {
   const previews = new Map();
+  const activePreviewByBinding = new Map();
+
+  function removePreview(token) {
+    const preview = previews.get(token);
+    if (!preview) return;
+    previews.delete(token);
+    if (activePreviewByBinding.get(preview.binding) === token) activePreviewByBinding.delete(preview.binding);
+  }
 
   function removeExpired() {
     const current = clock();
     for (const [token, preview] of previews) {
-      if (preview.expiresAt <= current) previews.delete(token);
+      if (preview.expiresAt <= current) removePreview(token);
     }
+  }
+
+  function invalidateAllPreviews() {
+    previews.clear();
+    activePreviewByBinding.clear();
   }
 
   async function previewStop(input, binding) {
@@ -176,6 +192,14 @@ function createProcessPreviewService({
       });
     }
 
+    const exactSelected = listening.find((row) => row.localHost === request.localAddress);
+    if (!exactSelected) {
+      return makeResult(request, 'refused', 'The selected listener endpoint is no longer present; preview is non-actionable.', clock, {
+        evidenceSource: snapshot.evidenceSource || 'netstat.exe -ano',
+        affectedEndpoints: [],
+      });
+    }
+
     const ownerPids = new Set(listening.map((row) => row.pid));
     if (ownerPids.size !== 1) {
       return makeResult(request, 'refused', 'More than one process could own the requested address scope; preview is ambiguous and non-actionable.', clock, {
@@ -184,7 +208,7 @@ function createProcessPreviewService({
       });
     }
 
-    const selected = listening[0];
+    const selected = exactSelected;
     let info;
     try {
       const processMap = await adapter.getProcessInfo([selected.pid]);
@@ -206,6 +230,17 @@ function createProcessPreviewService({
         selectedEndpoint: endpointFromRow(selected),
         metadataStatus: info?.metadataStatus || 'unavailable',
         metadataError: info?.metadataError || 'Process name, executable path or valid creation time unavailable',
+        affectedEndpoints: [],
+      });
+    }
+
+    if (snapshot.observationId && info.observationId && snapshot.observationId !== info.observationId) {
+      return makeResult(request, 'uncertain', 'Listener and process metadata observations do not describe the same snapshot; no preview was authorized.', clock, {
+        evidenceSource: snapshot.evidenceSource || 'netstat.exe -ano',
+        selectedEndpoint: endpointFromRow(selected),
+        metadataStatus: info.metadataStatus,
+        metadataError: 'Observation identity changed between listener and process metadata reads',
+        identityStatus: 'observation-mismatch',
         affectedEndpoints: [],
       });
     }
@@ -247,6 +282,14 @@ function createProcessPreviewService({
       .filter((row) => row.state === 'LISTENING' && row.protocol === 'TCP' && row.pid === selected.pid)
       .map(endpointFromRow);
     removeExpired();
+    const previewBinding = bindingKey(binding);
+    const supersededToken = activePreviewByBinding.get(previewBinding);
+    if (supersededToken) removePreview(supersededToken);
+    while (previews.size >= MAX_OUTSTANDING_PREVIEWS) {
+      const oldestToken = previews.keys().next().value;
+      if (!oldestToken) break;
+      removePreview(oldestToken);
+    }
     const token = tokenGenerator();
     if (typeof token !== 'string' || token.length < 32) throw new Error('Preview token generator returned an invalid token');
     const expiresAt = clock() + Math.max(1, ttlMs);
@@ -256,11 +299,14 @@ function createProcessPreviewService({
       processPath: info.path || '',
       creationTime: info.creationTime,
       metadataStatus: info.metadataStatus,
-      identity: { pid: selected.pid, creationTime: info.creationTime },
+      observedIdentity: { pid: selected.pid, creationTime: info.creationTime },
+      identityStatus: 'observed-subsequent-metadata',
+      executionAuthority: false,
     };
-    previews.set(token, { binding: bindingKey(binding), expiresAt, target, affectedEndpoints, relationships });
+    previews.set(token, { binding: previewBinding, expiresAt, target, affectedEndpoints, relationships });
+    activePreviewByBinding.set(previewBinding, token);
 
-    return makeResult(request, 'preview-ready', 'Read-only impact preview created. Process stopping remains disabled until M1.2 authorization.', clock, {
+    return makeResult(request, 'preview-ready', 'Read-only impact preview created from an observed listener and subsequent process metadata. It is not Windows-handle-verified; process stopping remains disabled until M1.2 authorization.', clock, {
       evidenceSource: snapshot.evidenceSource || 'netstat.exe -ano',
       preview: { token, expiresAt: new Date(expiresAt).toISOString(), oneTime: true },
       target,
@@ -280,7 +326,7 @@ function createProcessPreviewService({
     if (preview.binding !== bindingKey(binding)) {
       return { status: 'stalePreview', actionable: false, reason: 'Preview belongs to another trusted window or session.' };
     }
-    previews.delete(token);
+    removePreview(token);
     return {
       status: 'authorized-preview',
       actionable: false,
@@ -292,11 +338,12 @@ function createProcessPreviewService({
     };
   }
 
-  return { previewStop, authorizePreview };
+  return { previewStop, authorizePreview, invalidateAllPreviews };
 }
 
 module.exports = {
   PREVIEW_TTL_MS,
+  MAX_OUTSTANDING_PREVIEWS,
   createWindowsProcessAdapter,
   createProcessPreviewService,
   validateAuthorizationRequest,
