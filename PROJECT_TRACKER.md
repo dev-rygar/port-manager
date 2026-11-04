@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-04  
 **Status:** In development — **not production-ready**  
-**Current focus:** Planning checkpoint after PR #8: **M1.2 process-instance termination safety is the recommended next engineering milestone**, but no new Codex assignment has been started. **[M3.1 UI/onboarding/setup docs (Issue #9)](https://github.com/dev-rygar/port-manager/issues/9) is ON HOLD by owner**; no implementation PR. Original 5173 conflict no longer reproducible; Windows validation deferred to controlled release checks. Termination remains disabled  
+**Current focus:** **[M1.2 safe instance-bound termination Issue #10](https://github.com/dev-rygar/port-manager/issues/10) READY FOR CODEX** — implementation assignment defined, not yet started. Scope: verified identity, backend preview and short-lived authorization, handle-bound stop adapter, outcome verification, mocked security tests; **STOP GATE MUST REMAIN FALSE**. [M3.1 UI/setup (Issue #9)](https://github.com/dev-rygar/port-manager/issues/9) ON HOLD. Native Windows validation remains a release gate  
 **Application baseline on main:** 7fe087dd9257c5ab1a350c83468cd794ec676525 (PR #8 merge, 2026-11-04)
 **Post-merge validation:** [main push CI #41829413241](https://github.com/dev-rygar/port-manager/actions/runs/41829413241) **SUCCESS**, checked at merge commit `7fe087d`; mocked tests/syntax only, not native Windows acceptance.
 
@@ -17,7 +17,7 @@ This is the **central progress checklist** for development and release readiness
 | 1 — Master Plan | **Approved; PR unmerged** | Merge PR #1 |
 | 2 — In-depth audit | **Follow-up traced metadata failure: WT-01/02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED (owner report)** | Fix/verify metadata behavior, rerun WT-01–WT-03; WT-04–WT-12 deferred |
 | 3 — Architecture and roadmap | **Direction approved; OS choices provisional; PR unmerged** | Merge PR #3; finalize Windows-dependent decisions after testing |
-| 4 — Incremental implementation | **M0/M1.1 + M2/port-first flow merged through PR #8; M1.2 NOT IMPLEMENTED** | Recommended next: M1.2 design + non-destructive tests. M3.1 Issue #9 on hold, Windows E2E deferred |
+| 4 — Incremental implementation | **PR #8 merged; M1.2 Issue #10 next, not yet implemented** | Codex handle-bound stop + backend preview contract, mocked security tests, draft PR, independent review; then native Windows authorization tests. UI #9 on hold |
 | 5 — Production validation | **Not started** | Verify all safety, acceptance, and release gates |
 
 ## 2. GitHub PR integration tracker
@@ -131,7 +131,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [x] Verify PR #5 CI: **26 passed / 0 failed / 16 TODO**, mocked only ([workflow run](https://github.com/dev-rygar/port-manager/actions/runs/41054458871)).
 - [x] Integrate PR #5's M1.1 guard work through merged PR #8, instead of merging PR #5; Electron sandbox/preload native Windows validation **still pending**.
 
-**M1.2 — Mandatory safety work still outstanding**
+**M1.2 — Mandatory safety work still outstanding ([Issue #10](https://github.com/dev-rygar/port-manager/issues/10); next implementation milestone)**
 
 - [ ] Design a process-instance identity and handle PID reuse / time-of-check-time-of-use risks.
 - [ ] Revalidate intended targets and backend protection policy immediately before execution; fail closed for unverifiable identity.
@@ -142,7 +142,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Add passing security/identity regression tests and validate Windows-dependent behavior.
 - [x] PR #8 corrects `System` naming and disables destructive UI/main/backend actions, including PID 4; mocked regression coverage exists. Native Windows confirmation and full M1.2 are separate gates.
 
-**State:** M1.1 guards merged in PR #8 with all destructive operations disabled; **M1.2 NOT IMPLEMENTED**. A simple PID re-query is not sufficient proof against races.
+**State:** M1.1 guards merged in PR #8 with all destructive operations disabled; **M1.2 NOT IMPLEMENTED**. Issue #10 defines the next Codex work: short-lived process-instance preview/identity, handle-bound stop design, and post-stop verification. A simple PID re-query is not sufficient proof against races.
 
 ### Combined integration checkpoint — owner-reported 2026-11-04
 
@@ -244,13 +244,13 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order — 2026-11-04 priority review
 
-1. **M1.2 safe termination — recommended next engineering milestone (NOT STARTED):** define OS-backed process-instance identity and PID-reuse strategy; authorization, protected-target policy, impact preview, exact target confirmation, immediate pre-stop revalidation, and independently verified process/port outcomes. Start with architecture and mocked negative tests. **Keep all destructive entrypoints disabled** until independent review and Windows validation authorize activation. No M1.2 Codex command has been sent yet.
+1. **M1.2 Issue #10 — next Codex implementation (NOT STARTED):** [Engineering specification](https://github.com/dev-rygar/port-manager/issues/10) is ready for a focused branch from main `7fe087d`: OS-backed identity, protected-target policy, impact preview, one-time session-bound authorization, handle-bound execution with strict fail-closed fallback, independent process/port outcomes, mocked security regressions. **Do not enable destructive actions or perform real termination** in first PR; independent review and controlled Windows validation come before any activation.
 2. **M3.1 UI, onboarding, setup guide — ON HOLD at owner's request:** [Issue #9](https://github.com/dev-rygar/port-manager/issues/9) is specified only. No local Codex implementation, feature branch or draft PR has been reported. Resume only on owner's direction.
 3. **Windows Issue #7 and WT-01–WT-03 — DEFERRED, NOT PASSED:** original port-5173 issue is no longer reproducible. Later use disposable app-owned listeners and synchronized OS/Electron evidence, not another project or actual system process; no destructive testing.
 4. **Documentation integration PRs #1 → #2 → #3 — OPEN/UNMERGED:** approve/merge separately when authorized. This tracker lives on PR #3's branch, **not main**.
 5. **M4 production readiness — NOT STARTED:** Electron/build tooling lifecycle, dependency audit, Windows installer/portable smoke, standard-user permissions, accessibility, and deferred WT-01–WT-12; no release or binaries before safety acceptance.
 
-**Milestone sequencing:** M1.2 **design and mocked implementation first** → independent code/security review → native Windows verification (including Issue #7) → activation decision for termination → remaining UI/docs polish and production release gates. UI/docs M3.1 can be resumed independently; it is currently on hold.
+**Completion sequence:** [#10](https://github.com/dev-rygar/port-manager/issues/10) M1.2 guarded implementation → independent security review → approved disposable-process Windows tests (plus [#7](https://github.com/dev-rygar/port-manager/issues/7) diagnostics) → explicit stop gate activation decision → [#9](https://github.com/dev-rygar/port-manager/issues/9) UI/onboarding/install docs → M4 packaging/dependencies/accessibility → release candidate review. No public binaries until all safety and Windows release gates pass.
 
 **Important:** Do not add automatic killing or broaden bulk-termination behavior while identity and permission safety remain unresolved.
 
