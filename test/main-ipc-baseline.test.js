@@ -16,6 +16,7 @@ function createMainHarness() {
   const handlers = new Map();
   const calls = [];
   const diagnosticCalls = [];
+  const previewCalls = [];
   let window = null;
 
   class FakeBrowserWindow {
@@ -71,6 +72,14 @@ function createMainHarness() {
         findAlternativePort: async (request) => { diagnosticCalls.push({ channel: 'alternative', request }); return { requested: request, candidate: null, outcome: 'Cannot determine' }; },
       };
     }
+    if (id === './src/services/processPreviewService') {
+      return {
+        createProcessPreviewService: () => ({
+          previewStop: async (request, binding) => { previewCalls.push({ channel: 'preview', request, binding }); return { status: 'uncertain', ...request }; },
+          authorizePreview: (payload, binding) => { previewCalls.push({ channel: 'authorize', payload, binding }); return { status: 'stalePreview' }; },
+        }),
+      };
+    }
     throw new Error('Unexpected dependency: ' + id);
   };
 
@@ -81,7 +90,7 @@ function createMainHarness() {
     process: { platform: 'win32' },
   }, { filename: 'main.js' });
   return {
-    handlers, calls, diagnosticCalls,
+    handlers, calls, diagnosticCalls, previewCalls,
     getWindow: () => window,
     trustedEvent: () => ({ sender: window.webContents, senderFrame: window.webContents.mainFrame }),
   };
@@ -96,7 +105,7 @@ async function readyHarness() {
 
 test('IPC: narrow discovery, diagnostic, and termination channels are registered', () => {
   const h = createMainHarness();
-  assert.deepEqual(Array.from(h.handlers.keys()).sort(), ['ports:alternative', 'ports:check', 'ports:get', 'ports:kill', 'ports:probe']);
+  assert.deepEqual(Array.from(h.handlers.keys()).sort(), ['ports:alternative', 'ports:authorize-preview', 'ports:check', 'ports:get', 'ports:kill', 'ports:preview', 'ports:probe']);
 });
 
 test('IPC: authorized discovery delegates to service', async () => {
@@ -180,6 +189,34 @@ test('IPC: invalid diagnostic payloads are rejected before service dispatch', as
     }
   }
   assert.deepEqual(h.diagnosticCalls, []);
+});
+
+test('IPC: preview strips renderer-owned internals and authorization binds to the trusted window', async () => {
+  const h = await readyHarness();
+  const trusted = h.trustedEvent();
+  await h.handlers.get('ports:preview')(trusted, {
+    port: 5173, protocol: 'TCP', localAddress: '127.0.0.1',
+    networkContext: { snapshot: { entries: [{ pid: 4, state: 'LISTENING' }] } },
+    adapters: { getProcessInfo: 'spoofed', deadlineAt: 1 }, signal: { aborted: true },
+  });
+  await h.handlers.get('ports:authorize-preview')(trusted, { token: 'a'.repeat(64) });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(h.previewCalls)), [
+    { channel: 'preview', request: { port: 5173, protocol: 'TCP', localAddress: '127.0.0.1' }, binding: { webContentsId: 'main-window', sessionId: 'main-session', frameId: null, frameUrl: expectedUrl } },
+    { channel: 'authorize', payload: { token: 'a'.repeat(64) }, binding: { webContentsId: 'main-window', sessionId: 'main-session', frameId: null, frameUrl: expectedUrl } },
+  ]);
+});
+
+test('IPC: malformed preview and authorization payloads are rejected before service dispatch', async () => {
+  const h = await readyHarness();
+  const trusted = h.trustedEvent();
+  for (const payload of [null, [], '5173', {}, { port: 5173, protocol: 'UDP' }, { port: 5173, localAddress: 'not-an-ip' }]) {
+    await assert.rejects(h.handlers.get('ports:preview')(trusted, payload));
+  }
+  for (const payload of [null, [], {}, { token: 'short' }, { token: 'a'.repeat(64), target: {} }]) {
+    await assert.rejects(h.handlers.get('ports:authorize-preview')(trusted, payload));
+  }
+  assert.deepEqual(h.previewCalls, []);
 });
 
 test('Electron: sandbox enabled and unexpected navigation/window open denied', async () => {

@@ -25,6 +25,8 @@ const diagnosticOwner = document.getElementById('diagnostic-owner');
 const probePortBtn = document.getElementById('probe-port');
 const alternativePortBtn = document.getElementById('alternative-port');
 const copyPortBtn = document.getElementById('copy-port');
+const previewImpactBtn = document.getElementById('preview-impact');
+const impactPreview = document.getElementById('impact-preview');
 
 const STORAGE_KEY = 'port-manager-tags';
 const DEV_TAGS = ['backend', 'frontend', 'database'];
@@ -44,6 +46,7 @@ let sortColumn = 'port';
 let sortAsc = true;
 let activeTab = 'all';
 let lastDiagnostic = null;
+let selectedProcess = null;
 
 // Tag storage
 function getTags() {
@@ -357,6 +360,7 @@ function metadataStatusLabel(status) {
 }
 
 function showDetails(p) {
+  selectedProcess = p;
   document.getElementById('detail-app').textContent = p.applicationName || '—';
   document.getElementById('detail-name').textContent = p.processName || '—';
   document.getElementById('detail-pid').textContent = p.pid;
@@ -368,11 +372,51 @@ function showDetails(p) {
   if (detailLocal) detailLocal.textContent = p.localAddress || '(not available)';
   const detailIdentity = document.getElementById('detail-identity');
   if (detailIdentity) detailIdentity.textContent = p.processMetadataStatus === 'available' ? 'Metadata available; stopping disabled until M1.2 instance authorization' : 'Not verified; stopping disabled';
+  if (previewImpactBtn) {
+    const eligible = p.processMetadataStatus === 'available' && p.processCreationTime && Number(p.pid) > 0;
+    previewImpactBtn.disabled = !eligible;
+    previewImpactBtn.title = eligible ? 'Show all listener endpoints for this verified process instance' : 'Complete process metadata is required for a read-only impact preview';
+  }
+  if (impactPreview) {
+    impactPreview.textContent = '';
+    impactPreview.classList.add('hidden');
+  }
   detailsPanel.classList.remove('hidden');
 }
 
 function hideDetails() {
+  selectedProcess = null;
   detailsPanel.classList.add('hidden');
+}
+
+async function handlePreviewImpact() {
+  if (!selectedProcess || !window.portManager.previewImpact) return;
+  previewImpactBtn.disabled = true;
+  try {
+    const result = await window.portManager.previewImpact({
+      port: selectedProcess.port,
+      protocol: selectedProcess.protocol,
+      localAddress: selectedProcess.localHost || selectedProcess.localAddress,
+    });
+    impactPreview.classList.remove('hidden');
+    if (result.status !== 'preview-ready') {
+      impactPreview.textContent = result.reason || 'Impact preview is unavailable.';
+      return;
+    }
+    const selected = result.selectedEndpoint;
+    const endpointLabel = (endpoint) => `${endpoint.protocol} ${endpoint.localAddress} (PID ${endpoint.pid})`;
+    const endpoints = (result.affectedEndpoints || []).map((endpoint) => endpointLabel(endpoint)).join('; ');
+    const selectedLabel = selected ? endpointLabel(selected) : 'not available';
+    const relationshipNote = result.relationships?.status === 'available'
+      ? 'Parent/child relationships are informational only and are not included as stop targets.'
+      : 'Parent/child relationships are unavailable; no related process is inferred or included.';
+    impactPreview.textContent = `Verified ${result.target.processName || 'process'} PID ${result.target.pid} created ${result.target.creationTime}. Selected endpoint: ${selectedLabel}. Affected listeners: ${endpoints || 'none'}. ${relationshipNote} Stopping remains disabled pending M1.2.`;
+  } catch (err) {
+    impactPreview.classList.remove('hidden');
+    impactPreview.textContent = err.message || 'Impact preview is unavailable.';
+  } finally {
+    previewImpactBtn.disabled = false;
+  }
 }
 
 function diagnosticRequest() {
@@ -547,5 +591,6 @@ checkPortForm.addEventListener('submit', handleCheckPort);
 probePortBtn.addEventListener('click', handleProbePort);
 alternativePortBtn.addEventListener('click', handleAlternativePort);
 copyPortBtn.addEventListener('click', copyDiagnosticPort);
+previewImpactBtn?.addEventListener('click', handlePreviewImpact);
 
 loadPorts();

@@ -5,10 +5,12 @@ const { assertTrustedIpcSender } = require('./src/services/ipcSecurity');
 const { parseProcessId, assertDestructiveActionsEnabled } = require('./src/services/terminationPolicy');
 const { getPorts, killProcess } = require('./src/services/portService');
 const { validateRequest, checkPort, probePort, findAlternativePort } = require('./src/services/portDiagnosticService');
+const { createProcessPreviewService } = require('./src/services/processPreviewService');
 
 let mainWindow;
 const rendererPath = path.join(__dirname, 'src', 'renderer', 'index.html');
 const rendererUrl = pathToFileURL(rendererPath).href;
+const processPreviewService = createProcessPreviewService();
 
 function createDiagnosticRequest(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -20,6 +22,24 @@ function createDiagnosticRequest(payload) {
     localAddress: payload.localAddress,
   });
   return { port: validated.port, protocol: validated.protocol, localAddress: validated.localAddress };
+}
+
+function createPreviewAuthorizationRequest(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid preview authorization request');
+  const keys = Object.keys(payload);
+  if (keys.length !== 1 || keys[0] !== 'token' || typeof payload.token !== 'string' || payload.token.length < 32) {
+    throw new Error('Invalid preview authorization request');
+  }
+  return { token: payload.token };
+}
+
+function trustedPreviewBinding() {
+  return {
+    webContentsId: mainWindow?.webContents?.id ?? 'main-window',
+    sessionId: mainWindow?.webContents?.session?.id ?? 'main-session',
+    frameId: mainWindow?.webContents?.mainFrame?.routingId ?? null,
+    frameUrl: rendererUrl,
+  };
 }
 
 function createWindow() {
@@ -91,4 +111,14 @@ ipcMain.handle('ports:probe', async (event, request) => {
 ipcMain.handle('ports:alternative', async (event, request) => {
   assertTrustedIpcSender(event, mainWindow, rendererUrl);
   return findAlternativePort(createDiagnosticRequest(request));
+});
+
+ipcMain.handle('ports:preview', async (event, request) => {
+  assertTrustedIpcSender(event, mainWindow, rendererUrl);
+  return processPreviewService.previewStop(createDiagnosticRequest(request), trustedPreviewBinding());
+});
+
+ipcMain.handle('ports:authorize-preview', async (event, payload) => {
+  assertTrustedIpcSender(event, mainWindow, rendererUrl);
+  return processPreviewService.authorizePreview(createPreviewAuthorizationRequest(payload), trustedPreviewBinding());
 });

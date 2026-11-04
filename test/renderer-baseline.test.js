@@ -43,6 +43,7 @@ function createRendererHarness(initialRows) {
   const storage = new Map();
   let rows = initialRows;
   const calls = [];
+  const previewCalls = [];
   const document = {
     getElementById: get,
     querySelectorAll: () => [],
@@ -67,6 +68,16 @@ function createRendererHarness(initialRows) {
         calls.push(pid);
         throw new Error('Mocked kill is intentionally disabled in UI tests');
       },
+      previewImpact: async (request) => {
+        previewCalls.push(request);
+        return {
+          status: 'preview-ready',
+          target: { pid: 1234, processName: 'node.exe', creationTime: '2026-11-04T00:00:00.000Z' },
+          selectedEndpoint: { protocol: 'TCP', localAddress: '127.0.0.1:3000', pid: 1234 },
+          affectedEndpoints: [{ protocol: 'TCP', localAddress: '127.0.0.1:3000', pid: 1234 }],
+          relationships: { status: 'available' },
+        };
+      },
     },
   };
   const module = vm.runInNewContext(
@@ -84,7 +95,7 @@ function createRendererHarness(initialRows) {
     },
     { filename: 'app.js' }
   );
-  return { app: module, get, storage, calls, setRows: (next) => { rows = next; } };
+  return { app: module, get, storage, calls, previewCalls, setRows: (next) => { rows = next; } };
 }
 
 const rows = [
@@ -129,6 +140,22 @@ test('renderer: details fields are inserted as plain text', async () => {
   assert.equal(h.get('detail-port').textContent, 3000);
   assert.equal(h.get('detail-path').textContent, 'C:\\node.exe');
   assert.deepEqual(h.calls, []);
+});
+
+test('renderer: read-only impact preview shows affected endpoints without enabling stop', async () => {
+  const h = createRendererHarness(rows);
+  const selected = {
+    ...rows[0],
+    localHost: '127.0.0.1',
+    processMetadataStatus: 'available',
+    processCreationTime: '2026-11-04T00:00:00.000Z',
+  };
+  h.app.showDetails(selected);
+  assert.equal(h.get('preview-impact').disabled, false);
+  await h.get('preview-impact').listeners.click();
+  assert.deepEqual(JSON.parse(JSON.stringify(h.previewCalls)), [{ port: 3000, protocol: 'TCP', localAddress: '127.0.0.1' }]);
+  assert.match(h.get('impact-preview').textContent, /Affected listeners: TCP 127\.0\.0\.1:3000/);
+  assert.match(h.get('impact-preview').textContent, /Stopping remains disabled pending M1\.2/);
 });
 
 test('renderer: no-match search produces an empty All Ports table', async () => {
