@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-04  
 **Status:** In development — **not production-ready**  
-**Current focus:** Local combined M0/M1.1 + [issue #7](https://github.com/dev-rygar/port-manager/issues/7) feature reported READY FOR REVIEW (2026-11-04); obtain GitHub draft PR and independently review source/CI; M1.2 safety still blocked  
+**Current focus:** Draft [PR #8](https://github.com/dev-rygar/port-manager/pull/8) independent source review: **CHANGES REQUIRED** (backend stop trust, bind-probe cleanup, PID-0 TCP states, alternative-search deadline); [CI passed](https://github.com/dev-rygar/port-manager/actions/runs/41808318653); M1.2 release safety still blocked  
 **Application baseline on main:** 44cdc962c0fc0438cdbdf2b3b1ddc5b87f868466 (PR #6 merge, 2026-11-01)
 
 This is the **central progress checklist** for development and release readiness. For *what* to build, use the [Master Plan](https://github.com/dev-rygar/port-manager/pull/1); for *how* and milestone scope, use the [Architecture & Roadmap](https://github.com/dev-rygar/port-manager/pull/3); for findings and test requirements, use the [Engineering Audit](https://github.com/dev-rygar/port-manager/pull/2).
@@ -16,12 +16,12 @@ This is the **central progress checklist** for development and release readiness
 | 1 — Master Plan | **Approved; PR unmerged** | Merge PR #1 |
 | 2 — In-depth audit | **Follow-up traced metadata failure: WT-01/02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED (owner report)** | Fix/verify metadata behavior, rerun WT-01–WT-03; WT-04–WT-12 deferred |
 | 3 — Architecture and roadmap | **Direction approved; OS choices provisional; PR unmerged** | Merge PR #3; finalize Windows-dependent decisions after testing |
-| 4 — Incremental implementation | **Combined M0/M1.1 + M2/M3 issue #7 implemented locally (owner report); no remote PR** | Obtain draft PR, verify 49 passing/16 TODO tests independently, review security/probe behavior, retest Windows, then decide integration |
+| 4 — Incremental implementation | **Draft PR #8 open, CI passing, independent review CHANGES REQUIRED** | Codex revise four priority defects + regressions; re-review source/CI; Windows smoke and M1.2 still unresolved |
 | 5 — Production validation | **Not started** | Verify all safety, acceptance, and release gates |
 
 ## 2. GitHub PR integration tracker
 
-**Verified 2026-11-01:** **PR #6 MERGED** at `44cdc962`; PRs #1–#5 remain **open/unmerged**. PR #6 merged without a GitHub Actions run for its head and without WT-02 live validation; production release remains blocked.
+**Verified 2026-11-04:** **PR #6 MERGED** at `44cdc962`; PRs #1–#5 and new draft **PR #8** remain **open/unmerged**. PR #8 CI passed on `18639fd` but it has review blockers and no Windows smoke pass. Production release remains blocked.
 
 | PR | Deliverable | GitHub state | Dependency |
 | --- | --- | --- | --- |
@@ -31,6 +31,7 @@ This is the **central progress checklist** for development and release readiness
 | [#4](https://github.com/dev-rygar/port-manager/pull/4) | M0 automated tests and CI | Draft / open | None |
 | [#5](https://github.com/dev-rygar/port-manager/pull/5) | M1.1 IPC/process guards | Ready / open | **Stacked on #4**; integrate #4 first |
 | [#6](https://github.com/dev-rygar/port-manager/pull/6) | M2 discovery and renderer remediation | **Merged to main 2026-11-01** (`44cdc962`) | Open review findings remain follow-up work, especially total refresh deadline and endpoint fidelity; DO NOT count as M2 sign-off |
+| [#8](https://github.com/dev-rygar/port-manager/pull/8) | Combined M0/M1.1 + TCP diagnostics / Issue #7 | **Draft/open; CI PASS; independent review CHANGES REQUIRED** | Incorporates #4/#5 intent; do not merge #4/#5 blindly afterward; M1.2 remains unimplemented |
 
 Documentation approvals were recorded by the owner in conversation / PR comments; these are not GitHub-approved reviews or merges.
 
@@ -43,7 +44,9 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Retarget/rebase and merge M1.1 PR #5 after #4; rerun CI.
 - [x] Merge [PR #6](https://github.com/dev-rygar/port-manager/pull/6) into main as an explicitly **incomplete M2 increment**. Merge commit `44cdc962`; no CI or Windows smoke validation claimed.
 - [ ] Resolve [PR #6 review findings](https://github.com/dev-rygar/port-manager/pull/6#issuecomment-6548909082) in follow-up work on top of main; bound metadata refresh; explicit TCP/UDP scope and netstat timeout; preserve bindings; clarify metadata completeness.
-- [ ] Independently review **local-only** `integration/m0-m1.1-port-conflict` work before merging anything; Codex reports M0/M1.1 + issue #7 integrated in local branch based on `44cdc962`, but source, combined test results, and CI are not yet accessible on GitHub. PR #4 and PR #5 remain open.
+- [x] Independently inspect source and tests in [draft PR #8](https://github.com/dev-rygar/port-manager/pull/8) at `18639fd`. [CI run #41808318653](https://github.com/dev-rygar/port-manager/actions/runs/41808318653) passed syntax+mocked Node suite (49 passed / 16 TODO / 0 failed).
+- [ ] Resolve [PR #8 independent review](https://github.com/dev-rygar/port-manager/pull/8#issuecomment-6627613405) before merge: backend must not stop partial metadata names; prove short-lived probe cleanup across timeout/late callbacks; preserve Windows TCP PID-0 states as context; add total alternative-search deadline; fix package scripts/netstat error handling/address-family ambiguity.
+- [ ] After PR #8 is approved and merged, explicitly reconcile/close superseded PRs #4/#5. Do not merge their outdated source on top of the combined PR.
 - [ ] Integrate PR #4 and PR #5 safely against main **now containing #6**, preserving newer discovery implementation and existing M1.1 protections; no blind cherry-picks or conflict resolutions.
 - [ ] Reconcile status in this tracker against main after each integration.
 
@@ -140,10 +143,10 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 ### Combined integration checkpoint — owner-reported 2026-11-04
 
 - [x] Codex reports local `integration/m0-m1.1-port-conflict` branch based on `44cdc96…` integrates M0 test/CI scaffolding, M1.1 initial IPC/termination guards, bounded TCP discovery, and Check Port / explicit bind test / alternative suggestions from issue #7.
-- [x] Owner reports syntax checks and `git diff --check` PASS, Node test runner **49 passed / 0 failed / 16 intentional TODO** (65 total); these are **local reports only, not GitHub CI validation**.
-- [ ] Review actual diff and `docs/test-results/PORT_CONFLICT_RESOLUTION_INTEGRATION.md` when made accessible in a draft PR; report is currently local-only. GitHub `integration/m0-m1.1-port-conflict` remote ref was absent when checked 2026-11-04.
+- [x] Owner reports local syntax and `git diff --check` PASS; GitHub independently ran syntax and mocked Node tests on `18639fd`: **49 passed / 0 failed / 16 TODO** ([successful CI](https://github.com/dev-rygar/port-manager/actions/runs/41808318653)).
+- [x] Review committed diff, actual implementation, tests and `docs/test-results/PORT_CONFLICT_RESOLUTION_INTEGRATION.md` in [PR #8](https://github.com/dev-rygar/port-manager/pull/8); senior review status **CHANGES REQUIRED**, with specific source-line findings recorded.
 - [ ] Check protected PID 4 and uncertain identity cannot trigger termination through any renderer or IPC path; M1.2 process-instance identity/revalidation/post-stop verification **not completed**.
-- [ ] Verify bind probe never runs implicitly and always closes sockets; test edge/error/timeout paths and output truthfulness.
+- [ ] Bind probe is explicit-click in reviewed UI, but **cleanup is NOT proven** on late-listen/close-timeout races; add tests and fix before merge. Do not treat 49 passing mocks as proof of resource cleanup.
 - [ ] Document Windows smoke test as **INCONCLUSIVE/BLOCKED** because `netstat` did not expose the disposable listener; no WT-01/WT-02/WT-03 promotion to PASS.
 
 ### M2 — Windows discovery and process relationships
@@ -186,9 +189,9 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Test permissions, missing metadata, process churn and latency on Windows.
 - [ ] Decide and document TCP-only vs explicitly supported UDP for v1.
 - [x] Accept [issue #7](https://github.com/dev-rygar/port-manager/issues/7) as an M2/M3 feature gap: a port may fail application binding without appearing in the TCP LISTENING-only All Ports table. Incident root cause still unverified.
-- [ ] **Reported locally implemented; independent review required:** M2 `checkPort({port, protocol, localAddress})` diagnostics, timeout and evidence semantics. Verify no LISTENING row is not misreported as proof of free port; audit exact code and Windows behavior.
-- [ ] **Reported locally implemented; independent review required:** explicit-click temporary bind probe; verify strict opt-in only, address/port validation, bounded lifetime and cleanup on all paths, and no false ownership claims.
-- [ ] **Reported locally implemented; independent review required:** bounded alternative-port finder with safe, copyable instructions, no project edits or process termination.
+- [x] Independently review M2 `checkPort({port, protocol, localAddress})` source in PR #8; explicit `No listener observed` uncertainty is retained, but parser drops PID-0 TCP states and address-family semantics need correction before feature acceptance.
+- [ ] Review confirms UI only invokes temporary bind on deliberate clicks, but socket cleanup/error/late-callback handling requires fixes and stronger tests before acceptance.
+- [ ] Alternative-port candidate count is bounded but **total elapsed time is not**; reuse one snapshot/exclusion check, add overall deadline/cancellation and regression coverage before acceptance.
 - [ ] M2: test targeted port checks on normal Windows for loopback, wildcard, IPv4/IPv6, active listener, non-LISTENING state, access-denied, excluded range where available, and transient races. Never perform process termination as a diagnostic.
 
 **State:** **M2 PR #6 MERGED into main 2026-11-01 — INCOMPLETE / FOLLOW-UP REQUIRED.** Renderer/PID remediation verified in source, but serial metadata performance, netstat timeout/TCP-UDP behavior, address fidelity and identity completeness need correction. Only 11 locally reported mocked passes; no PR #6 CI; live WT-02 inconclusive. Current main STILL has baseline raw-PID stop behavior; M1.2 remains mandatory. Reconcile PR #4/#5 without discarding M2 code.
@@ -196,7 +199,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 ### M3 — Simple developer workflow and features
 
 - [ ] Fast port-first lookup with clear occupied/free/unknown states.
-- [ ] **Reported locally implemented; independent review required:** M3 [issue #7 Check → Diagnose → Guided Resolve UI](https://github.com/dev-rygar/port-manager/issues/7) for user-selected port/address, evidence, explicit bind test and alternative-port guidance; verify disabled unsafe actions, accessible UX, and no automatic probes.
+- [x] M3 [issue #7 Check → Diagnose → Guided Resolve UI](https://github.com/dev-rygar/port-manager/issues/7) reviewed in draft PR #8, including explicit user-triggered tests and safe fallback explanations; **end-to-end acceptance still pending P1 fixes and Windows evidence**.
 - [ ] Treat an optional active bind probe as an explicitly user-initiated, short-lived feature requiring separate engineering risk review; do not implement automatic probes during refresh.
 - [ ] Understandable owner identification, with uncertainty distinguished from facts.
 - [ ] Related ports and parent/child inspection without default tree termination.
@@ -234,8 +237,8 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order
 
-1. **Obtain independent code review of combined local branch:** Codex reports `integration/m0-m1.1-port-conflict` based on `44cdc962` with 49 passing, 16 TODO, 0 failures. Publish a sanitized draft PR including implementation, tests and report (not private/unrelated files). No merge authorization implied.
-2. **Review the security and correctness contract:** main-process IPC guards, PID 4/protected-target rejection, shell-free termination fallback, user-opt-in bind probe and port alternatives; rerun combined tests/CI, distinguish 49 PASS from 16 TODO and document unresolved M1.2.
+1. **Codex revise draft PR #8** based on [senior-engineering review](https://github.com/dev-rygar/port-manager/pull/8#issuecomment-6627613405): backend stop authorization must reject partial metadata or be fully disabled pending M1.2; bind cleanup must withstand late events; parser must preserve PID-0 TIME_WAIT context; alternative finder needs hard deadline.
+2. **Fix supporting P2 issues and retest:** remove duplicate `package.json` scripts, include `safeMarkup.js` in syntax checks, distinguish netstat timeout from empty snapshot, handle dual-stack wildcard and IPv6 exclusions conservatively. Update mock coverage and rerun CI; preserve 16 TODOs where unimplemented.
 3. **Investigate WT-02 in normal Windows context:** persistent disposable listener accepted a client but neither OS `netstat` nor app showed LISTENING; preserve blocked status until repeatable end-to-end evidence. Record [issue #7](https://github.com/dev-rygar/port-manager/issues/7) Cartograph 5173 as an **unresolved user scenario**, not a proven parsing defect.
 4. **Complete doc PR integrations** #1 → #2 → #3 under separate merge approval; reconcile tracker after each merge.
 5. **Address post-merge M2 review findings in a targeted Codex task:** set a real total refresh deadline and command bounds; preserve per-address listener fidelity; document TCP-only or implement/test UDP; encode creation-time completeness precisely; add tests and CI.
