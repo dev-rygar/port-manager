@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-04  
 **Status:** In development — **not production-ready**  
-**Current focus:** [PR #8 MERGED](https://github.com/dev-rygar/port-manager/pull/8) into main at `7fe087d` (development increment; 64 pass / 16 TODO / 0 fail in reviewed CI); [#4](https://github.com/dev-rygar/port-manager/pull/4) and [#5](https://github.com/dev-rygar/port-manager/pull/5) closed as superseded. **Next:** native Windows validation of Issue #7; M1.2 disabled and release-blocking  
+**Current focus:** [M3.1 UI/onboarding and honest setup docs (Issue #9)](https://github.com/dev-rygar/port-manager/issues/9), on main `7fe087d` with PR #8 merged. Original [5173 incident (Issue #7)](https://github.com/dev-rygar/port-manager/issues/7) is no longer reproducible for owner; defer native Windows acceptance to controlled release validation. M1.2 termination remains disabled and release-blocking  
 **Application baseline on main:** 7fe087dd9257c5ab1a350c83468cd794ec676525 (PR #8 merge, 2026-11-04)
 **Post-merge validation:** [main push CI #41829413241](https://github.com/dev-rygar/port-manager/actions/runs/41829413241) **SUCCESS**, checked at merge commit `7fe087d`; mocked tests/syntax only, not native Windows acceptance.
 
@@ -17,7 +17,7 @@ This is the **central progress checklist** for development and release readiness
 | 1 — Master Plan | **Approved; PR unmerged** | Merge PR #1 |
 | 2 — In-depth audit | **Follow-up traced metadata failure: WT-01/02 FAIL / BLOCKED; WT-03 NOT IMPLEMENTED / BLOCKED (owner report)** | Fix/verify metadata behavior, rerun WT-01–WT-03; WT-04–WT-12 deferred |
 | 3 — Architecture and roadmap | **Direction approved; OS choices provisional; PR unmerged** | Merge PR #3; finalize Windows-dependent decisions after testing |
-| 4 — Incremental implementation | **PR #8 merged to main; M0/M1.1 and port-first diagnostics integrated, termination disabled** | Native Windows Issue #7/WT-01–03 evidence and M1.2 process-instance stop safety remain blocked |
+| 4 — Incremental implementation | **PR #8 merged; M3.1 UI/first-run/help and installation documentation next** | New Issue #9 UX/docs draft PR; M1.2 termination and native Windows diagnostics stay as release gates, not blockers to UX work |
 | 5 — Production validation | **Not started** | Verify all safety, acceptance, and release gates |
 
 ## 2. GitHub PR integration tracker
@@ -203,7 +203,10 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 ### M3 — Simple developer workflow and features
 
 - [ ] Fast port-first lookup with clear occupied/free/unknown states.
-- [x] M3 [Issue #7 Check → Diagnose → Guided Resolve UI](https://github.com/dev-rygar/port-manager/issues/7) merged via PR #8. Security P1 source-review fixes complete; **native Windows end-to-end acceptance still pending**.
+- [x] M3 [Issue #7 Check → Diagnose → Guided Resolve UI](https://github.com/dev-rygar/port-manager/issues/7) merged via PR #8. Security P1 source-review fixes complete; owner reports original incident no longer reproducible, **native Windows end-to-end acceptance still pending**.
+- [x] Define [M3.1 Issue #9](https://github.com/dev-rygar/port-manager/issues/9): port-first UI hierarchy, first-use help, honest evidence/unknown outcomes, clear Development-tab tags, accessible empty/error/loading, and Windows installation/run-from-source documentation. No behavior changes to privilege or stopping.
+- [ ] Implement M3.1 UX and regression tests in a new Codex feature branch and submit a draft PR for independent design/code review.
+- [ ] Rewrite inaccurate README (currently claims Kill/installer download links) and add canonical Windows setup/how-to guide. No published GitHub releases verified 2026-11-04; do not invent downloads or claim signed Windows builds.
 - [ ] Treat an optional active bind probe as an explicitly user-initiated, short-lived feature requiring separate engineering risk review; do not implement automatic probes during refresh.
 - [ ] Understandable owner identification, with uncertainty distinguished from facts.
 - [ ] Related ports and parent/child inspection without default tree termination.
@@ -214,7 +217,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Improve empty/error/loading states and keyboard accessibility.
 - [ ] Add development groups and evidence-qualified duplicate dev-server guidance.
 
-**State:** Not started.
+**State:** M3's first port-conflict workflow is merged via PR #8; M3.1 UX/onboarding/docs planned next, not yet implemented. M1.2 and Windows acceptance remain open.
 
 ### M4 — Engineering and distribution readiness
 
@@ -241,15 +244,13 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 ## 8. Next actions in order
 
-1. **Windows Issue #7 validation (Codex):** test Check Port on an app-owned disposable listener and free/busy/TIME_WAIT/excluded/IPv4-IPv6 cases with a synchronized `netstat` snapshot; investigate prior missing listener. Use a normal non-elevated Windows session; no process kills or networking config changes.
-2. **Review the Windows evidence and close only validated requirements:** map the results to WT-01–WT-03 and Issue #7 acceptance without claiming PASS for absent or ambiguous OS signals.
-3. **M1.2 architecture and implementation:** design process-instance identity, impact preview, immediate pre-stop revalidation, post-stop verification and per-target outcomes. Keep all destructive entrypoints disabled pending independent tests and approval.
-4. **Keep the missing-listener regression explicit:** the previous disposable listener was absent from `netstat`; if still reproducible, isolate timing/environment before attributing it to parsing. Incident remains unresolved until same-time evidence.
-5. **Complete document PR integrations** #1 → #2 → #3 under separate merge approval; reconcile tracker against main.
-6. **Follow-up M2 improvements:** validate bounded timeout behavior on Windows, keep per-address fidelity, and make creation-time completeness explicit; add OS-backed regressions where practical.
-7. **Issue #7 quality and release readiness:** validate the merged Check Port flow, on-demand temporary bind probe, cleanup behavior, evidence truthfulness and suggested alternatives with live Windows data.
-8. **Continue M1.2 as a release-blocking workstream:** no raw-PID termination until instance identity, impact preview, revalidation and post-stop verification pass review.
-9. **Rerun WT-01–WT-03 non-destructively; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
+1. **M3.1 UI and onboarding (Codex):** implement [Issue #9](https://github.com/dev-rygar/port-manager/issues/9) in a new branch from merged main; simplify port-first hierarchy, add contextual help and honest diagnostic statuses, accessible states/keyboard navigation; keep stop controls disabled.
+2. **Accurate installation and setup guide (same PR):** rewrite README and create canonical Windows Getting Started documentation. Use real repo URL, PowerShell `npm.cmd` commands, CI Node 22 baseline, existing `package-lock.json`; explain source run/local build vs unpublished releases, and troubleshooting without privilege escalation.
+3. **Independent review & CI:** verify docs against source scripts, test renderer interactions and no backend/security regression, run syntax/tests/diff check. Publish draft PR for review; no merge or release without authorization.
+4. **Native Windows diagnostics deferred, not cancelled:** original 5173 conflict is now absent on the owner's machine; use app-owned disposable test listeners and synchronized OS/app snapshots when Windows validation resumes. Keep [Issue #7](https://github.com/dev-rygar/port-manager/issues/7), WT-01–WT-03 unresolved until evidence; do not force recurrence.
+5. **M1.2 safety architecture and implementation:** identity continuity, protected-target authorization, impact preview, immediate revalidation and independent outcome verification; `DESTRUCTIVE_ACTIONS_ENABLED = false` until acceptance.
+6. **Document PR integrations** #1 → #2 → #3 under separate approval; reconcile tracker against main.
+7. **Production readiness:** Windows runtime/packaging, permission variants, accessibility, deps and deferred WT tests must pass before any public binary release.
 
 **Important:** Do not add automatic killing or broaden bulk-termination behavior while identity and permission safety remain unresolved.
 
