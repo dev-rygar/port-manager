@@ -156,7 +156,7 @@ test('discovery: netstat listener data is preserved when metadata is denied and 
     throw deniedError();
   };
 
-  const rows = await getPorts({ commandRunner: runner });
+  const rows = (await getPorts({ commandRunner: runner })).ports;
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].port, 3000);
@@ -165,4 +165,57 @@ test('discovery: netstat listener data is preserved when metadata is denied and 
   assert.equal(rows[0].processMetadataStatus, 'permission-denied');
   assert.equal(rows[0].applicationName, 'Unknown process');
   assert.equal(rows[0].portService, 'Dev server');
+});
+
+test('discovery: metadata concurrency is capped and deadline returns timeout statuses', async () => {
+  let active = 0;
+  let maxActive = 0;
+  const runner = async (file) => {
+    if (file === 'powershell.exe') {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      active -= 1;
+      return { stdout: JSON.stringify({ id: 1, name: 'node', path: 'C:\\node.exe' }) };
+    }
+    return { stdout: '' };
+  };
+
+  const info = await getProcessInfo([1, 2, 3, 4, 5, 6, 7, 8], runner, { deadlineAt: Date.now() + 40 });
+
+  assert.ok(maxActive <= 4);
+  assert.equal(info.size, 8);
+  assert.ok([...info.values()].some((value) => value.metadataStatus === 'timeout'));
+});
+
+test('discovery: listener rows survive a metadata deadline', async () => {
+  const runner = async (file) => {
+    if (file === 'netstat.exe') return { stdout: 'TCP 127.0.0.1:5173 0.0.0.0:0 LISTENING 4321\r\n' };
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return { stdout: JSON.stringify({ id: 4321, name: 'node', path: 'C:\\node.exe' }) };
+  };
+
+  const rows = (await getPorts({ commandRunner: runner, deadlineMs: 40 })).ports;
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].port, 5173);
+  assert.equal(rows[0].processMetadataStatus, 'timeout');
+});
+
+test('discovery: failed netstat returns an explicit cannot-determine snapshot', async () => {
+  const runner = async () => { throw Object.assign(new Error('netstat timed out'), { code: 'ETIMEDOUT' }); };
+  const result = await getPorts({ commandRunner: runner, deadlineMs: 20 });
+  assert.equal(result.status, 'cannot-determine');
+  assert.deepEqual(result.ports, []);
+  assert.equal(result.errorCode, 'ETIMEDOUT');
+  assert.match(result.error, /netstat timed out|Discovery deadline exceeded/);
+});
+
+test('discovery: the Windows System process name is not rewritten as System.exe', async () => {
+  const runner = async (file) => {
+    if (file === 'powershell.exe') return { stdout: JSON.stringify({ id: 4, name: 'System', path: 'C:\\Windows\\System32\\ntoskrnl.exe', creationTime: '2026-11-04T00:00:00.000Z' }) };
+    throw new Error(`Unexpected command ${file}`);
+  };
+  const info = await getProcessInfo([4], runner);
+  assert.equal(info.get(4).name, 'System');
 });

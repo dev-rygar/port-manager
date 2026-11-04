@@ -13,15 +13,28 @@ const tabAllContent = document.getElementById('tab-all-content');
 const tabDevContent = document.getElementById('tab-dev-content');
 const devEmpty = document.getElementById('dev-empty');
 const devGroups = document.getElementById('dev-groups');
+const checkPortForm = document.getElementById('check-port-form');
+const checkPortInput = document.getElementById('check-port');
+const checkAddressInput = document.getElementById('check-address');
+const diagnosticPanel = document.getElementById('port-diagnostic');
+const diagnosticOutcome = document.getElementById('diagnostic-outcome');
+const diagnosticTime = document.getElementById('diagnostic-time');
+const diagnosticReason = document.getElementById('diagnostic-reason');
+const diagnosticEvidence = document.getElementById('diagnostic-evidence');
+const diagnosticOwner = document.getElementById('diagnostic-owner');
+const probePortBtn = document.getElementById('probe-port');
+const alternativePortBtn = document.getElementById('alternative-port');
+const copyPortBtn = document.getElementById('copy-port');
 
 const STORAGE_KEY = 'port-manager-tags';
 const DEV_TAGS = ['backend', 'frontend', 'database'];
+const DESTRUCTIVE_ACTIONS_ENABLED = false;
 
 const TYPE_TOOLTIPS = {
-  system: 'Windows or OS core service. Usually safe to leave running.',
-  user: 'Your apps or services. Safe to manage.',
-  development: 'Dev server (Vite, Next, Node, etc.). Safe to kill when not coding.',
-  common: 'Well-known service (DB, HTTP, Redis, etc.). Check before killing.',
+  system: 'Windows or OS core service. Process stopping is disabled pending M1.2 authorization.',
+  user: 'User application or service. Process stopping is disabled pending M1.2 authorization.',
+  development: 'Dev server (Vite, Next, Node, etc.). Process stopping is disabled until M1.2 instance authorization.',
+  common: 'Well-known service (DB, HTTP, Redis, etc.). Process stopping is disabled pending M1.2 authorization.',
   unknown:
     "Port not in our reference database. Could be: user apps, dynamic Windows ports (49152–65535), or less common services. Check the Application column and click the row for details.",
 };
@@ -30,6 +43,7 @@ let portsData = [];
 let sortColumn = 'port';
 let sortAsc = true;
 let activeTab = 'all';
+let lastDiagnostic = null;
 
 // Tag storage
 function getTags() {
@@ -61,7 +75,12 @@ async function loadPorts() {
   hideError();
 
   try {
-    portsData = await window.portManager.getPorts();
+    const snapshot = await window.portManager.getPorts();
+    const discovery = Array.isArray(snapshot) ? { status: 'available', ports: snapshot } : snapshot;
+    portsData = discovery?.ports || [];
+    if (discovery?.status !== 'available') {
+      showError(`Cannot determine current listeners: ${discovery?.error || 'TCP discovery failed'}`);
+    }
     renderCurrentTab();
   } catch (err) {
     showError(err.message || 'Failed to load ports');
@@ -120,6 +139,18 @@ function sortPorts(data) {
   });
 }
 
+function canRequestStop(process) {
+  if (!DESTRUCTIVE_ACTIONS_ENABLED || !process || process.pid === 4 || process.processMetadataStatus !== 'available') return false;
+  const name = String(process.processName || '').toLowerCase();
+  return !['system', 'system idle process', 'registry', 'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe', 'lsass.exe', 'lsaiso.exe', 'services.exe', 'svchost.exe', 'dwm.exe', 'sihost.exe', 'fontdrvhost.exe', 'explorer.exe', 'runtimebroker.exe', 'searchhost.exe', 'startmenuexperiencehost.exe', 'spoolsv.exe', 'conhost.exe'].includes(name);
+}
+
+function stopButton(process) {
+  const disabled = !canRequestStop(process);
+  const title = disabled ? 'Stopping is disabled until M1.2 process-instance authorization' : 'Stop this process after M1.2 authorization';
+  return `<button class="btn btn-danger kill-btn" data-pid="${process.pid}" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''}>Stop</button>`;
+}
+
 function renderTable(data) {
   const filtered = filterPorts(data);
   const sorted = sortPorts(filtered);
@@ -146,7 +177,7 @@ function renderTable(data) {
         </div>
       </td>
       <td>
-        <button class="btn btn-danger kill-btn" data-pid="${p.pid}">Kill</button>
+        ${stopButton(p)}
       </td>
     </tr>
   `;
@@ -157,6 +188,7 @@ function renderTable(data) {
   document.querySelectorAll('.kill-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (btn.disabled) return;
       const pid = parseInt(btn.dataset.pid, 10);
       const process = portsData.find((item) => item.pid === pid);
       handleKill(pid, getProcessActionLabel(process));
@@ -247,11 +279,12 @@ function renderDevTab() {
     if (items.length === 0) return '';
 
     const pids = items.map((i) => i.pid);
+    const canStopAll = items.every(canRequestStop);
     return `
       <div class="dev-group" data-tag="${tag}">
         <div class="dev-group-header">
           <h3 class="dev-group-title">${tag.charAt(0).toUpperCase() + tag.slice(1)}</h3>
-          <button class="btn btn-danger kill-all-btn" data-pids="${pids.join(',')}" data-tag="${tag}">Kill all ${tag.charAt(0).toUpperCase() + tag.slice(1)}</button>
+          <button class="btn btn-danger kill-all-btn" data-pids="${pids.join(',')}" data-tag="${tag}" ${canStopAll ? '' : 'disabled'} title="${canStopAll ? 'Stop processes in this group after M1.2 authorization' : 'Stopping is disabled until M1.2 process-instance authorization'}">Stop all ${tag.charAt(0).toUpperCase() + tag.slice(1)}</button>
         </div>
         <div class="dev-group-items">
           ${items
@@ -262,7 +295,7 @@ function renderDevTab() {
                 <span class="port">${p.port}</span>
                 ${escapeHtml(p.applicationName || '—')} · PID ${p.pid}
               </span>
-              <button class="btn btn-danger kill-btn" data-pid="${p.pid}">Kill</button>
+              ${stopButton(p)}
             </div>
           `
             )
@@ -283,6 +316,7 @@ function renderDevTab() {
   devGroups.querySelectorAll('.kill-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (btn.disabled) return;
       const pid = parseInt(btn.dataset.pid, 10);
       const process = portsData.find((item) => item.pid === pid);
       handleKill(pid, getProcessActionLabel(process));
@@ -330,6 +364,10 @@ function showDetails(p) {
   document.getElementById('detail-desc').textContent = p.portDescription || '—';
   document.getElementById('detail-path').textContent = p.processPath || '(not available)';
   document.getElementById('detail-meta').textContent = metadataStatusLabel(p.processMetadataStatus);
+  const detailLocal = document.getElementById('detail-local');
+  if (detailLocal) detailLocal.textContent = p.localAddress || '(not available)';
+  const detailIdentity = document.getElementById('detail-identity');
+  if (detailIdentity) detailIdentity.textContent = p.processMetadataStatus === 'available' ? 'Metadata available; stopping disabled until M1.2 instance authorization' : 'Not verified; stopping disabled';
   detailsPanel.classList.remove('hidden');
 }
 
@@ -337,12 +375,105 @@ function hideDetails() {
   detailsPanel.classList.add('hidden');
 }
 
+function diagnosticRequest() {
+  const port = Number(checkPortInput.value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Enter a port number from 1 to 65535.');
+  return { port, protocol: 'TCP', localAddress: checkAddressInput.value || '127.0.0.1' };
+}
+
+function renderDiagnostic(result) {
+  lastDiagnostic = result;
+  diagnosticPanel.classList.remove('hidden');
+  diagnosticOutcome.textContent = result.outcome || 'Cannot determine';
+  diagnosticTime.textContent = result.checkedAt ? new Date(result.checkedAt).toLocaleTimeString() : '';
+  diagnosticReason.textContent = result.reason || 'No additional explanation was provided.';
+  const endpoint = document.getElementById('diagnostic-endpoint');
+  if (endpoint) endpoint.textContent = result.listener
+    ? `TCP ${result.listener.localAddress || `${result.localAddress}:${result.listener.port || result.port}`}${result.listener.pid ? ` (PID ${result.listener.pid})` : ''}`
+    : '';
+  diagnosticEvidence.textContent = result.evidenceSource || 'No evidence source available';
+  const context = document.getElementById('diagnostic-context');
+  if (context) {
+    const nonListening = result.context?.nonListening?.map((entry) => `${entry.state} at ${entry.localAddress}`).join(', ');
+    const excluded = result.context?.excludedRanges;
+    const excludedText = excluded?.status === 'available' && excluded.ranges?.length
+      ? `Excluded-range context: ${excluded.ranges.map((range) => `${range.start}-${range.end}`).join(', ')}`
+      : excluded?.status === 'unavailable' ? 'Excluded-range context unavailable.' : '';
+    context.textContent = [nonListening ? `Non-listening context: ${nonListening}` : '', excludedText].filter(Boolean).join(' ');
+  }
+  diagnosticOwner.classList.add('hidden');
+  diagnosticOwner.textContent = '';
+  if (result.process && result.process.metadataStatus === 'available') {
+    diagnosticOwner.textContent = `Owner metadata available for this snapshot: ${result.process.name || 'Unknown'}${result.listener?.pid ? ` (PID ${result.listener.pid})` : ''}. Stopping is disabled until M1.2 instance authorization.`;
+    diagnosticOwner.classList.remove('hidden');
+  } else if (result.outcome === 'Listening') {
+    diagnosticOwner.textContent = 'A listener was observed, but its process identity could not be verified.';
+    diagnosticOwner.classList.remove('hidden');
+  }
+  probePortBtn.classList.toggle('hidden', result.outcome === 'Available at check time');
+  copyPortBtn.classList.add('hidden');
+}
+
+async function handleCheckPort(event) {
+  event.preventDefault();
+  try {
+    const result = await window.portManager.checkPort(diagnosticRequest());
+    renderDiagnostic(result);
+  } catch (err) {
+    showError(err.message || 'Unable to check the port');
+  }
+}
+
+async function handleProbePort() {
+  try {
+    const result = await window.portManager.probePort(diagnosticRequest());
+    renderDiagnostic(result);
+    if (result.outcome === 'Available at check time') {
+      copyPortBtn.classList.remove('hidden');
+      copyPortBtn.dataset.port = String(result.port);
+    }
+  } catch (err) {
+    showError(err.message || 'Unable to run the temporary bind probe');
+  }
+}
+
+async function handleAlternativePort() {
+  alternativePortBtn.disabled = true;
+  try {
+    const result = await window.portManager.findAlternativePort(diagnosticRequest());
+    if (result.candidate) {
+      renderDiagnostic(result.candidate);
+      diagnosticReason.textContent = `${result.candidate.guidance} Available at check time only.`;
+      copyPortBtn.classList.remove('hidden');
+      copyPortBtn.dataset.port = String(result.candidate.port);
+    } else {
+      renderDiagnostic({ ...result, reason: 'No candidate could be established during the bounded search.' });
+    }
+  } catch (err) {
+    showError(err.message || 'Unable to find an alternative port');
+  } finally {
+    alternativePortBtn.disabled = false;
+  }
+}
+
+async function copyDiagnosticPort() {
+  const port = copyPortBtn.dataset.port;
+  if (!port || !navigator.clipboard) return;
+  await navigator.clipboard.writeText(port);
+  copyPortBtn.textContent = 'Copied';
+  setTimeout(() => { copyPortBtn.textContent = 'Copy port'; }, 1200);
+}
+
 async function handleKill(pid, processName) {
+  if (!DESTRUCTIVE_ACTIONS_ENABLED) {
+    showError('Process stopping is disabled pending M1.2 process-instance authorization.');
+    return;
+  }
   const p = portsData.find((x) => x.pid === pid);
   const isSystem = p?.portType === 'system';
-  const warn = isSystem ? '\n\n⚠️ This appears to be a SYSTEM process. Killing it may cause instability.' : '';
+  const warn = isSystem ? '\n\nThis appears to be a system process. Process stopping is disabled pending M1.2 authorization.' : '';
   const confirmed = confirm(
-    `Kill process "${processName}" (PID ${pid})?\n\nThis will force-terminate the application.${warn}`
+    `Stop process "${processName}" (PID ${pid})?\n\nProcess stopping is gated by M1.2 process-instance authorization.${warn}`
   );
   if (!confirmed) return;
 
@@ -356,9 +487,13 @@ async function handleKill(pid, processName) {
 }
 
 async function handleKillAll(pids, tag) {
+  if (!DESTRUCTIVE_ACTIONS_ENABLED) {
+    showError('Process stopping is disabled pending M1.2 process-instance authorization.');
+    return;
+  }
   const label = tag.charAt(0).toUpperCase() + tag.slice(1);
   const confirmed = confirm(
-    `Kill all ${label} ports (${pids.length} process${pids.length > 1 ? 'es' : ''})?\n\nThis will force-terminate the applications.`
+    `Stop all ${label} ports (${pids.length} process${pids.length > 1 ? 'es' : ''})?\n\nProcess stopping is gated by M1.2 process-instance authorization.`
   );
   if (!confirmed) return;
 
@@ -408,5 +543,9 @@ document.querySelectorAll('.port-table th[data-sort]').forEach((th) => {
 searchInput.addEventListener('input', () => renderCurrentTab());
 refreshBtn.addEventListener('click', loadPorts);
 detailsClose.addEventListener('click', hideDetails);
+checkPortForm.addEventListener('submit', handleCheckPort);
+probePortBtn.addEventListener('click', handleProbePort);
+alternativePortBtn.addEventListener('click', handleAlternativePort);
+copyPortBtn.addEventListener('click', copyDiagnosticPort);
 
 loadPorts();
