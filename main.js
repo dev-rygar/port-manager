@@ -4,11 +4,23 @@ const { pathToFileURL } = require('url');
 const { assertTrustedIpcSender } = require('./src/services/ipcSecurity');
 const { parseProcessId, assertDestructiveActionsEnabled } = require('./src/services/terminationPolicy');
 const { getPorts, killProcess } = require('./src/services/portService');
-const { checkPort, probePort, findAlternativePort } = require('./src/services/portDiagnosticService');
+const { validateRequest, checkPort, probePort, findAlternativePort } = require('./src/services/portDiagnosticService');
 
 let mainWindow;
 const rendererPath = path.join(__dirname, 'src', 'renderer', 'index.html');
 const rendererUrl = pathToFileURL(rendererPath).href;
+
+function createDiagnosticRequest(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('Invalid diagnostic request');
+  }
+  const validated = validateRequest({
+    port: payload.port,
+    protocol: payload.protocol,
+    localAddress: payload.localAddress,
+  });
+  return { port: validated.port, protocol: validated.protocol, localAddress: validated.localAddress };
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -68,15 +80,15 @@ ipcMain.handle('ports:kill', async (event, pid) => {
 
 ipcMain.handle('ports:check', async (event, request) => {
   assertTrustedIpcSender(event, mainWindow, rendererUrl);
-  return checkPort(request);
+  return checkPort(createDiagnosticRequest(request));
 });
 
 ipcMain.handle('ports:probe', async (event, request) => {
   assertTrustedIpcSender(event, mainWindow, rendererUrl);
-  return probePort(request);
+  return probePort(createDiagnosticRequest(request));
 });
 
 ipcMain.handle('ports:alternative', async (event, request) => {
   assertTrustedIpcSender(event, mainWindow, rendererUrl);
-  return findAlternativePort(request);
+  return findAlternativePort(createDiagnosticRequest(request));
 });

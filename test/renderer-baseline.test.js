@@ -160,6 +160,14 @@ test('renderer: protected process names and unknown metadata disable stop contro
   assert.equal(h.app.canRequestStop({ pid: 99, processName: 'node.exe', processMetadataStatus: 'permission-denied' }), false);
 });
 
+test('renderer: process descriptions stay neutral while stopping is disabled', () => {
+  const h = createRendererHarness(rows);
+  h.app.renderTable([{ ...rows[0], portDescription: null, processMetadataStatus: 'available' }]);
+  assert.match(h.get('table-body').innerHTML, /M1\.2 process-instance authorization/);
+  assert.match(h.get('table-body').innerHTML, /disabled/);
+  assert.doesNotMatch(h.get('table-body').innerHTML, /safe to kill|safe to manage/i);
+});
+
 test('renderer: discovery failure is shown as cannot determine instead of an empty success', async () => {
   const h = createRendererHarness({
     status: 'cannot-determine',

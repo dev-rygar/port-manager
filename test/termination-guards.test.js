@@ -112,7 +112,7 @@ test('PM-A12: name-only fallback cannot authorize termination while disabled', a
 
 test('M1: suspicious names are denied by policy regardless of PID range', () => {
   for (const name of ['lsass.exe', 'WinLogon.EXE', 'explorer.exe', 'C:\\Windows\\svchost.exe', 'SYSTEM']) {
-    assert.throws(() => assertProcessCanBeStopped({ pid: 70000, processName: name, ownsListeningPort: true }), /Protected/);
+    assert.throws(() => assertProcessCanBeStopped({ pid: 70000, processName: name, ownsListeningPort: true, metadataStatus: 'available', creationTime: '2026-11-04T00:00:00.000Z' }), /Protected/);
   }
 });
 
@@ -123,6 +123,11 @@ test('M1.2 prerequisite: partial metadata cannot authorize a process instance', 
   assert.throws(() => assertProcessCanBeStopped({
     pid: 70000, processName: 'node.exe', ownsListeningPort: true, metadataStatus: 'available', creationTime: null,
   }), /creation time/);
+});
+
+test('M1.2 prerequisite: metadata status and creation time are mandatory', () => {
+  assert.throws(() => assertProcessCanBeStopped({ pid: 70000, processName: 'node.exe', ownsListeningPort: true, creationTime: '2026-11-04T00:00:00.000Z' }), /complete process metadata/);
+  assert.throws(() => assertProcessCanBeStopped({ pid: 70000, processName: 'node.exe', ownsListeningPort: true, metadataStatus: 'available', creationTime: 'not-a-time' }), /creation time/);
 });
 
 // Still open until preview/revalidation/OS-specific identity work is complete.

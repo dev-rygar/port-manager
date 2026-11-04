@@ -57,6 +57,7 @@ function normalizeProcessName(name) {
   const value = String(name || '').trim();
   if (!value) return '';
   const basename = value.split(/[\\/]/).pop();
+  if (basename.toLowerCase() === 'system') return 'System';
   return basename.toLowerCase().endsWith('.exe') ? basename : `${basename}.exe`;
 }
 

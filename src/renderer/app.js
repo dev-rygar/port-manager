@@ -31,10 +31,10 @@ const DEV_TAGS = ['backend', 'frontend', 'database'];
 const DESTRUCTIVE_ACTIONS_ENABLED = false;
 
 const TYPE_TOOLTIPS = {
-  system: 'Windows or OS core service. Usually safe to leave running.',
-  user: 'Your apps or services. Safe to manage.',
+  system: 'Windows or OS core service. Process stopping is disabled pending M1.2 authorization.',
+  user: 'User application or service. Process stopping is disabled pending M1.2 authorization.',
   development: 'Dev server (Vite, Next, Node, etc.). Process stopping is disabled until M1.2 instance authorization.',
-  common: 'Well-known service (DB, HTTP, Redis, etc.). Check before killing.',
+  common: 'Well-known service (DB, HTTP, Redis, etc.). Process stopping is disabled pending M1.2 authorization.',
   unknown:
     "Port not in our reference database. Could be: user apps, dynamic Windows ports (49152–65535), or less common services. Check the Application column and click the row for details.",
 };
@@ -147,7 +147,7 @@ function canRequestStop(process) {
 
 function stopButton(process) {
   const disabled = !canRequestStop(process);
-  const title = disabled ? 'Stopping is disabled until M1.2 process-instance authorization' : 'Stop this verified process';
+  const title = disabled ? 'Stopping is disabled until M1.2 process-instance authorization' : 'Stop this process after M1.2 authorization';
   return `<button class="btn btn-danger kill-btn" data-pid="${process.pid}" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''}>Stop</button>`;
 }
 
@@ -284,7 +284,7 @@ function renderDevTab() {
       <div class="dev-group" data-tag="${tag}">
         <div class="dev-group-header">
           <h3 class="dev-group-title">${tag.charAt(0).toUpperCase() + tag.slice(1)}</h3>
-          <button class="btn btn-danger kill-all-btn" data-pids="${pids.join(',')}" data-tag="${tag}" ${canStopAll ? '' : 'disabled'} title="${canStopAll ? 'Stop verified processes in this group' : 'Stopping is disabled until M1.2 process-instance authorization'}">Stop all ${tag.charAt(0).toUpperCase() + tag.slice(1)}</button>
+          <button class="btn btn-danger kill-all-btn" data-pids="${pids.join(',')}" data-tag="${tag}" ${canStopAll ? '' : 'disabled'} title="${canStopAll ? 'Stop processes in this group after M1.2 authorization' : 'Stopping is disabled until M1.2 process-instance authorization'}">Stop all ${tag.charAt(0).toUpperCase() + tag.slice(1)}</button>
         </div>
         <div class="dev-group-items">
           ${items
@@ -465,11 +465,15 @@ async function copyDiagnosticPort() {
 }
 
 async function handleKill(pid, processName) {
+  if (!DESTRUCTIVE_ACTIONS_ENABLED) {
+    showError('Process stopping is disabled pending M1.2 process-instance authorization.');
+    return;
+  }
   const p = portsData.find((x) => x.pid === pid);
   const isSystem = p?.portType === 'system';
-  const warn = isSystem ? '\n\n⚠️ This appears to be a SYSTEM process. Killing it may cause instability.' : '';
+  const warn = isSystem ? '\n\nThis appears to be a system process. Process stopping is disabled pending M1.2 authorization.' : '';
   const confirmed = confirm(
-    `Kill process "${processName}" (PID ${pid})?\n\nThis will force-terminate the application.${warn}`
+    `Stop process "${processName}" (PID ${pid})?\n\nProcess stopping is gated by M1.2 process-instance authorization.${warn}`
   );
   if (!confirmed) return;
 
@@ -483,9 +487,13 @@ async function handleKill(pid, processName) {
 }
 
 async function handleKillAll(pids, tag) {
+  if (!DESTRUCTIVE_ACTIONS_ENABLED) {
+    showError('Process stopping is disabled pending M1.2 process-instance authorization.');
+    return;
+  }
   const label = tag.charAt(0).toUpperCase() + tag.slice(1);
   const confirmed = confirm(
-    `Kill all ${label} ports (${pids.length} process${pids.length > 1 ? 'es' : ''})?\n\nThis will force-terminate the applications.`
+    `Stop all ${label} ports (${pids.length} process${pids.length > 1 ? 'es' : ''})?\n\nProcess stopping is gated by M1.2 process-instance authorization.`
   );
   if (!confirmed) return;
 

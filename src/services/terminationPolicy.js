@@ -44,6 +44,12 @@ function normalizeProcessName(value) {
   return value.trim().split(/[\\/]/).pop().trim().toLowerCase();
 }
 
+function isValidCreationTime(value) {
+  if (value instanceof Date) return !Number.isNaN(value.getTime());
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0;
+  return typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value));
+}
+
 function assertProcessCanBeStopped({ pid, processName, ownsListeningPort, metadataStatus, creationTime }) {
   const id = parseProcessId(pid);
 
@@ -56,10 +62,10 @@ function assertProcessCanBeStopped({ pid, processName, ownsListeningPort, metada
     throw new Error('Process no longer owns a detected listening port; refresh and try again');
   }
 
-  if (metadataStatus !== undefined && metadataStatus !== 'available') {
+  if (metadataStatus !== 'available') {
     throw new Error('Cannot verify complete process metadata; termination refused');
   }
-  if (metadataStatus !== undefined && !creationTime) {
+  if (!isValidCreationTime(creationTime)) {
     throw new Error('Cannot verify process instance creation time; termination refused');
   }
 
@@ -77,6 +83,7 @@ module.exports = {
   DESTRUCTIVE_ACTIONS_ENABLED,
   assertDestructiveActionsEnabled,
   parseProcessId,
+  isValidCreationTime,
   assertProcessCanBeStopped,
   normalizeProcessName,
 };

@@ -210,3 +210,12 @@ test('discovery: failed netstat returns an explicit cannot-determine snapshot', 
   assert.equal(result.errorCode, 'ETIMEDOUT');
   assert.match(result.error, /netstat timed out|Discovery deadline exceeded/);
 });
+
+test('discovery: the Windows System process name is not rewritten as System.exe', async () => {
+  const runner = async (file) => {
+    if (file === 'powershell.exe') return { stdout: JSON.stringify({ id: 4, name: 'System', path: 'C:\\Windows\\System32\\ntoskrnl.exe', creationTime: '2026-11-04T00:00:00.000Z' }) };
+    throw new Error(`Unexpected command ${file}`);
+  };
+  const info = await getProcessInfo([4], runner);
+  assert.equal(info.get(4).name, 'System');
+});

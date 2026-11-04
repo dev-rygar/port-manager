@@ -254,8 +254,11 @@ function probePort({ port, localAddress = '127.0.0.1', protocol = 'TCP', adapter
     server.once('error', onError);
     operationTimer = setTimeout(() => failOrTimeout('timeout'), Math.max(1, timeoutMs));
     if (signal) {
-      if (signal.aborted) failOrTimeout('timeout');
-      else signal.addEventListener('abort', () => failOrTimeout('timeout'), { once: true });
+      if (signal.aborted) {
+        failOrTimeout('timeout');
+        return;
+      }
+      signal.addEventListener('abort', () => failOrTimeout('timeout'), { once: true });
     }
     try {
       server.listen({ host: request.localAddress, port: request.port }, onListening);

@@ -1,6 +1,6 @@
 # Port Conflict Resolution Integration
 
-**Engineering status:** READY FOR RE-REVIEW
+**Engineering status:** READY FOR FINAL ENGINEERING REVIEW
 **Branch:** `integration/m0-m1.1-port-conflict`
 **Starting review commit:** `18639fd9bc7053e74b191a93eb64a9d4a92460de`
 **Base:** `main` merge `44cdc962c0fc0438cdbdf2b3b1ddc5b87f868466` (PR #6)
@@ -11,6 +11,7 @@
 - M0 test infrastructure and CI remain integrated through `.github/workflows/baseline-checks.yml`, `docs/TESTING.md`, package scripts, and baseline tests.
 - M1.1 IPC sender checks, strict PID validation, protected-process guards, explicit metadata states, and renderer escaping remain in place.
 - Privileged `ports:kill` and destructive renderer controls are fail-closed by default. The existing M1.1 policy code is preserved for future M1.2 integration, but a trusted direct IPC call cannot bypass the feature gate.
+- Diagnostic IPC handlers validate and reconstruct requests containing only `port`, `protocol`, and `localAddress`; renderer payloads cannot supply adapters, snapshots, signals, deadlines, limits, or cleanup settings.
 - Windows discovery retains TCP listener rows when process metadata is unavailable and returns an explicit `cannot-determine` result when `netstat.exe` fails or times out.
 - `parseNetstat` retains non-listening diagnostic rows, including `TIME_WAIT` with PID 0. PID 0 is diagnostic context only and is never a stoppable owner.
 - Address-family matching is conservative: IPv6 wildcard evidence can make an IPv4 result ambiguous, and IPv4 exclusion evidence is not reused as IPv6 evidence.
@@ -45,7 +46,7 @@ Unrelated local reports remain untracked and excluded from this change.
 
 ## M0/M1.1 integration details
 
-IPC requires the expected top-level application frame. PID input is strict, PID 4 and protected names remain refused, and the prior M1.1 ownership/metadata/creation-time checks remain available for future authorized execution. Destructive process actions are currently disabled before discovery or `taskkill` work begins. No real process termination tests were run.
+IPC requires the expected top-level application frame. PID input is strict, PID 4 and protected names remain refused, and the preserved M1.1 ownership/metadata/creation-time checks now require available metadata and a valid creation time. Destructive process actions are currently disabled before discovery or `taskkill` work begins. No real process termination tests were run.
 
 Discovery uses injectable command runners, TCP-only `netstat.exe -ano` parsing, explicit subprocess deadlines, bounded metadata concurrency, and separate process name/path/creation-time/status fields. The old shell-interpolated kill path was not restored.
 
@@ -62,6 +63,8 @@ Discovery uses injectable command runners, TCP-only `netstat.exe -ano` parsing, 
 
 The probe records listening, bind-error, close-requested, close-confirmed, close-failed, and cleanup-timeout states. It requests close on success, bind errors, operation timeout, and abort. A result is classified as available or unavailable only when the close callback confirms cleanup. Late listening events, failed close callbacks, missing close callbacks, and cleanup deadlines return `Cannot determine` with `cleanupConfirmed: false`; they never claim confirmed cleanup. Best-effort connection-closing methods are invoked on cleanup timeout when the server exposes them.
 
+An already-aborted request returns before `server.listen` is called and retains an uncertain cleanup result.
+
 ## Alternative-port resolution
 
 Search is capped at the configured candidate limit and an overall deadline. When using the built-in diagnostic path it obtains one passive network snapshot and reuses it across candidates. Each candidate is checked passively, excluded ranges are treated as context rather than proof, and the explicit probe receives the remaining deadline. Deadline expiry, probe cleanup uncertainty, and diagnostic failures return `Cannot determine` rather than a false candidate.
@@ -71,7 +74,7 @@ Search is capped at the configured candidate limit and an overall deadline. When
 | Check | Actual result |
 | --- | --- |
 | `npm.cmd run check:syntax` | PASS |
-| `npm.cmd test` | PASS - 74 tests, 58 passing, 16 intentional TODOs, 0 failures |
+| `npm.cmd test` | PASS - 80 tests, 64 passing, 16 intentional TODOs, 0 failures |
 | `git diff --check` | PASS |
 | Windows smoke test | BLOCKED / inconclusive - prior disposable Node listener on `127.0.0.1:55317` was not visible to `netstat.exe`; no process was killed |
 
@@ -80,12 +83,16 @@ All subprocess tests are mocked. No administrator privileges, system configurati
 ## Regression coverage added or updated
 
 - Direct trusted IPC and backend calls cannot bypass the disabled termination feature gate.
+- Diagnostic IPC payloads cannot override backend adapters, network evidence, timeouts, cleanup limits, deadlines, or candidate limits.
+- Invalid diagnostic payloads are rejected before service dispatch.
+- Pre-aborted bind probes do not call `listen`.
 - Partial metadata and missing creation time cannot satisfy the preserved termination policy.
 - Temporary bind success, `EADDRINUSE`, `EACCES`, operation timeout, delayed listening, failed close, and cleanup timeout paths are covered.
 - Realistic Windows `TIME_WAIT` output is parsed through `parseNetstat` into `checkPort`, retaining PID 0 as non-actionable context.
 - Failed netstat discovery and renderer display of `cannot-determine` are covered.
 - IPv6 wildcard / IPv4 dual-stack ambiguity and address-family-specific excluded-range lookup are covered.
 - Alternative-port snapshot reuse and overall-deadline behavior are covered.
+- `System` process names remain `System` rather than being rewritten as `System.exe`; UI process descriptions remain neutral while stopping is disabled.
 
 ## Known limitations and remaining blockers
 

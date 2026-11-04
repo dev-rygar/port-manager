@@ -112,6 +112,18 @@ test('diagnostics: explicit bind probes classify success, EADDRINUSE, EACCES, an
   assert.equal(timedOut.calls.forceClose, 1);
 });
 
+test('diagnostics: an already-aborted probe never calls listen', async () => {
+  const server = mockServer();
+  const controller = new AbortController();
+  controller.abort();
+  const result = await probePort({ port: 5173, signal: controller.signal, adapters: { createServer: () => server, cleanupTimeoutMs: 5 } });
+  assert.equal(server.calls.listen, 0);
+  assert.equal(server.calls.close, 1);
+  assert.equal(result.outcome, 'Cannot determine');
+  assert.equal(result.probe.cleanupConfirmed, false);
+  assert.equal(result.probe.status, 'cleanup-timeout');
+});
+
 test('diagnostics: late listening after timeout cannot claim cleanup and failed close is explicit', async () => {
   const late = mockServer({ listeningDelayMs: 25, closeCallback: false });
   const lateResult = await probePort({ port: 5173, adapters: { createServer: () => late, timeoutMs: 5, cleanupTimeoutMs: 5 } });

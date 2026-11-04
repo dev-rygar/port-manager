@@ -15,6 +15,7 @@ const expectedUrl = pathToFileURL(path.join(projectRoot, 'src', 'renderer', 'ind
 function createMainHarness() {
   const handlers = new Map();
   const calls = [];
+  const diagnosticCalls = [];
   let window = null;
 
   class FakeBrowserWindow {
@@ -62,10 +63,12 @@ function createMainHarness() {
       };
     }
     if (id === './src/services/portDiagnosticService') {
+      const { validateRequest } = require('../src/services/portDiagnosticService');
       return {
-        checkPort: async (request) => ({ ...request, outcome: 'No listener observed' }),
-        probePort: async (request) => ({ ...request, outcome: 'Available at check time' }),
-        findAlternativePort: async (request) => ({ requested: request, candidate: null, outcome: 'Cannot determine' }),
+        validateRequest,
+        checkPort: async (request) => { diagnosticCalls.push({ channel: 'check', request }); return { ...request, outcome: 'No listener observed' }; },
+        probePort: async (request) => { diagnosticCalls.push({ channel: 'probe', request }); return { ...request, outcome: 'Cannot determine' }; },
+        findAlternativePort: async (request) => { diagnosticCalls.push({ channel: 'alternative', request }); return { requested: request, candidate: null, outcome: 'Cannot determine' }; },
       };
     }
     throw new Error('Unexpected dependency: ' + id);
@@ -78,7 +81,7 @@ function createMainHarness() {
     process: { platform: 'win32' },
   }, { filename: 'main.js' });
   return {
-    handlers, calls,
+    handlers, calls, diagnosticCalls,
     getWindow: () => window,
     trustedEvent: () => ({ sender: window.webContents, senderFrame: window.webContents.mainFrame }),
   };
@@ -140,6 +143,43 @@ test('PM-A12: trusted IPC cannot bypass the disabled termination feature gate', 
   const h = await readyHarness();
   await assert.rejects(h.handlers.get('ports:kill')(h.trustedEvent(), 70000), /termination is disabled until M1.2/);
   assert.deepEqual(h.calls, []);
+});
+
+test('IPC: diagnostic handlers strip renderer adapters, snapshots, timing, and limit overrides', async () => {
+  const h = await readyHarness();
+  const trusted = h.trustedEvent();
+
+  await h.handlers.get('ports:check')(trusted, {
+    port: '5173', protocol: 'TCP', localAddress: '127.0.0.1',
+    adapters: { networkContext: { snapshot: { entries: [{ state: 'LISTENING', pid: 9999 }] } }, timeoutMs: 1 },
+    networkSnapshot: { entries: [{ state: 'LISTENING', pid: 9999 }] }, deadlineAt: 1, deadlineMs: 1,
+  });
+  await h.handlers.get('ports:probe')(trusted, {
+    port: 5174, protocol: 'TCP', localAddress: '127.0.0.1',
+    adapters: { cleanupTimeoutMs: 999999, timeoutMs: 1 }, signal: { aborted: true },
+  });
+  await h.handlers.get('ports:alternative')(trusted, {
+    port: 5175, protocol: 'TCP', localAddress: '127.0.0.1',
+    adapters: { networkSnapshot: { entries: [] }, deadlineMs: 1 }, deadlineMs: 1, limit: 999,
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(h.diagnosticCalls)), [
+    { channel: 'check', request: { port: 5173, protocol: 'TCP', localAddress: '127.0.0.1' } },
+    { channel: 'probe', request: { port: 5174, protocol: 'TCP', localAddress: '127.0.0.1' } },
+    { channel: 'alternative', request: { port: 5175, protocol: 'TCP', localAddress: '127.0.0.1' } },
+  ]);
+});
+
+test('IPC: invalid diagnostic payloads are rejected before service dispatch', async () => {
+  const h = await readyHarness();
+  const trusted = h.trustedEvent();
+  const payloads = [null, [], '5173', 5173, {}, { port: 5173, protocol: 'UDP' }, { port: 5173, localAddress: 'not-an-ip' }];
+  for (const channel of ['ports:check', 'ports:probe', 'ports:alternative']) {
+    for (const payload of payloads) {
+      await assert.rejects(h.handlers.get(channel)(trusted, payload));
+    }
+  }
+  assert.deepEqual(h.diagnosticCalls, []);
 });
 
 test('Electron: sandbox enabled and unexpected navigation/window open denied', async () => {
