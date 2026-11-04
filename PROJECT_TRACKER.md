@@ -4,6 +4,7 @@
 **Status:** In development — **not production-ready**  
 **Current focus:** [PR #8 MERGED](https://github.com/dev-rygar/port-manager/pull/8) into main at `7fe087d` (development increment; 64 pass / 16 TODO / 0 fail in reviewed CI); [#4](https://github.com/dev-rygar/port-manager/pull/4) and [#5](https://github.com/dev-rygar/port-manager/pull/5) closed as superseded. **Next:** native Windows validation of Issue #7; M1.2 disabled and release-blocking  
 **Application baseline on main:** 7fe087dd9257c5ab1a350c83468cd794ec676525 (PR #8 merge, 2026-11-04)
+**Post-merge validation:** [main push CI #41829413241](https://github.com/dev-rygar/port-manager/actions/runs/41829413241) **SUCCESS**, checked at merge commit `7fe087d`; mocked tests/syntax only, not native Windows acceptance.
 
 This is the **central progress checklist** for development and release readiness. For *what* to build, use the [Master Plan](https://github.com/dev-rygar/port-manager/pull/1); for *how* and milestone scope, use the [Architecture & Roadmap](https://github.com/dev-rygar/port-manager/pull/3); for findings and test requirements, use the [Engineering Audit](https://github.com/dev-rygar/port-manager/pull/2).
 
