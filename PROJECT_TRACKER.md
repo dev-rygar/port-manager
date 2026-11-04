@@ -1,8 +1,8 @@
 # Port Manager — Project Tracker
 
-**Last updated:** 2026-11-01  
+**Last updated:** 2026-11-04  
 **Status:** In development — **not production-ready**  
-**Current focus:** PR #6 merged as incremental M2 work; urgent integration of M0 tests + M1.1 guards without regressing discovery, followed by M2 follow-ups and M1.2 termination safety  
+**Current focus:** Integrate M0/M1.1 on PR #6's main baseline; resolve M2 discovery reliability and accepted [port-conflict diagnosis issue #7](https://github.com/dev-rygar/port-manager/issues/7); M1.2 termination safety remains release-blocking  
 **Application baseline on main:** 44cdc962c0fc0438cdbdf2b3b1ddc5b87f868466 (PR #6 merge, 2026-11-01)
 
 This is the **central progress checklist** for development and release readiness. For *what* to build, use the [Master Plan](https://github.com/dev-rygar/port-manager/pull/1); for *how* and milestone scope, use the [Architecture & Roadmap](https://github.com/dev-rygar/port-manager/pull/3); for findings and test requirements, use the [Engineering Audit](https://github.com/dev-rygar/port-manager/pull/2).
@@ -174,12 +174,17 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Deduplicate/bound expensive OS queries and return explicit partial/permission errors.
 - [ ] Test permissions, missing metadata, process churn and latency on Windows.
 - [ ] Decide and document TCP-only vs explicitly supported UDP for v1.
+- [x] Accept [issue #7](https://github.com/dev-rygar/port-manager/issues/7) as an M2/M3 feature gap: a port may fail application binding without appearing in the TCP LISTENING-only All Ports table. Incident root cause still unverified.
+- [ ] M2: implement bounded, read-only `checkPort({port, protocol, localAddress})` diagnostics with exact tuple/state/provenance, Windows excluded/reserved ranges when permitted, and clear unknown/permission-denied outcomes; do not infer free solely from missing LISTENING row.
+- [ ] M2: test targeted port checks on normal Windows for loopback, wildcard, IPv4/IPv6, active listener, non-LISTENING state, access-denied, excluded range where available, and transient races. Never perform process termination as a diagnostic.
 
 **State:** **M2 PR #6 MERGED into main 2026-11-01 — INCOMPLETE / FOLLOW-UP REQUIRED.** Renderer/PID remediation verified in source, but serial metadata performance, netstat timeout/TCP-UDP behavior, address fidelity and identity completeness need correction. Only 11 locally reported mocked passes; no PR #6 CI; live WT-02 inconclusive. Current main STILL has baseline raw-PID stop behavior; M1.2 remains mandatory. Reconcile PR #4/#5 without discarding M2 code.
 
 ### M3 — Simple developer workflow and features
 
 - [ ] Fast port-first lookup with clear occupied/free/unknown states.
+- [ ] M3: deliver [issue #7 targeted conflict-check UI](https://github.com/dev-rygar/port-manager/issues/7) for user-selected port and bind address, with timestamped evidence and safe next steps even when All Ports contains no matching listener. Avoid promising guaranteed availability or automatically probing via bind.
+- [ ] Treat an optional active bind probe as an explicitly user-initiated, short-lived feature requiring separate engineering risk review; do not implement automatic probes during refresh.
 - [ ] Understandable owner identification, with uncertainty distinguished from facts.
 - [ ] Related ports and parent/child inspection without default tree termination.
 - [ ] Accessible impact preview, confirmation and post-action feedback.
@@ -218,11 +223,12 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 
 1. **Immediate integration plan for Codex:** build a dedicated branch from updated main (`44cdc962`), identify and reconcile test/guard work from PR #4 then PR #5, preserve PR #6 discovery and renderer fixes, and convert legacy M0 WMIC/exec mocks to the modern execFile metadata contract. No unapproved merge or destructive test.
 2. **Run integrated automated coverage and review carefully:** preserve protected-target/IPC sender guards from #5, add test coverage around new listener/metadata states and refuse unsafe raw PIDs; do not claim full M1.2 based on #5.
-3. **Investigate WT-02 in normal Windows context:** persistent disposable listener accepted a client but neither OS `netstat` nor app showed LISTENING; preserve blocked status until repeatable end-to-end evidence.
+3. **Investigate WT-02 in normal Windows context:** persistent disposable listener accepted a client but neither OS `netstat` nor app showed LISTENING; preserve blocked status until repeatable end-to-end evidence. Record [issue #7](https://github.com/dev-rygar/port-manager/issues/7) Cartograph 5173 as an **unresolved user scenario**, not a proven parsing defect.
 4. **Complete doc PR integrations** #1 → #2 → #3 under separate merge approval; reconcile tracker after each merge.
 5. **Address post-merge M2 review findings in a targeted Codex task:** set a real total refresh deadline and command bounds; preserve per-address listener fidelity; document TCP-only or implement/test UDP; encode creation-time completeness precisely; add tests and CI.
-6. **Keep M1.2 as its own release-blocking safety workstream:** privileged backend authorization based on process-instance identity, impact preview, revalidation and post-stop verification. The M2 merge is read-only discovery progress, not an authorization to terminate PIDs.
-7. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
+6. **After M2 foundations, implement accepted issue #7 diagnostics:** targeted port check (port/address/protocol) with listener vs availability uncertainty, excluded-range context, explicit permissions, and M3 port-first UX. Only opt-in active bind checks after separate risk review.
+7. **Keep M1.2 as its own release-blocking safety workstream:** privileged backend authorization based on process-instance identity, impact preview, revalidation and post-stop verification. The M2 merge is read-only discovery progress, not an authorization to terminate PIDs.
+8. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
 
 **Important:** Do not add automatic killing or broaden bulk-termination behavior while identity and permission safety remain unresolved.
 
