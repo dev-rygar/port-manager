@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-04  
 **Status:** In development — **not production-ready**  
-**Current focus:** Integrate M0/M1.1 on PR #6's main baseline; resolve M2 discovery reliability and accepted [port-conflict diagnosis issue #7](https://github.com/dev-rygar/port-manager/issues/7); M1.2 termination safety remains release-blocking  
+**Current focus:** One combined Codex integration: PR #4 M0 tests/CI + PR #5 M1.1 guards on PR #6 main, AND immediately deliver [issue #7](https://github.com/dev-rygar/port-manager/issues/7) Check → Diagnose → Guided Resolve; M1.2 termination safety stays blocked  
 **Application baseline on main:** 44cdc962c0fc0438cdbdf2b3b1ddc5b87f868466 (PR #6 merge, 2026-11-01)
 
 This is the **central progress checklist** for development and release readiness. For *what* to build, use the [Master Plan](https://github.com/dev-rygar/port-manager/pull/1); for *how* and milestone scope, use the [Architecture & Roadmap](https://github.com/dev-rygar/port-manager/pull/3); for findings and test requirements, use the [Engineering Audit](https://github.com/dev-rygar/port-manager/pull/2).
@@ -176,7 +176,9 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 - [ ] Test permissions, missing metadata, process churn and latency on Windows.
 - [ ] Decide and document TCP-only vs explicitly supported UDP for v1.
 - [x] Accept [issue #7](https://github.com/dev-rygar/port-manager/issues/7) as an M2/M3 feature gap: a port may fail application binding without appearing in the TCP LISTENING-only All Ports table. Incident root cause still unverified.
-- [ ] M2: implement bounded, read-only `checkPort({port, protocol, localAddress})` diagnostics with exact tuple/state/provenance, Windows excluded/reserved ranges when permitted, and clear unknown/permission-denied outcomes; do not infer free solely from missing LISTENING row.
+- [ ] **Immediate combined task:** M2: implement bounded, read-only `checkPort({port, protocol, localAddress})` diagnostics with exact tuple/state/provenance, Windows excluded/reserved ranges when permitted, and clear unknown/permission-denied outcomes; do not infer free solely from missing LISTENING row.
+- [ ] **Immediate combined task:** explicit-click, bounded short-lived TCP bind probe to distinguish instantaneous bind availability/errors; never auto-run or promise sustained availability; release socket on all paths.
+- [ ] **Immediate combined task:** opt-in bounded alternative-port finder with copyable framework-neutral instructions, without changing other projects or stopping processes.
 - [ ] M2: test targeted port checks on normal Windows for loopback, wildcard, IPv4/IPv6, active listener, non-LISTENING state, access-denied, excluded range where available, and transient races. Never perform process termination as a diagnostic.
 
 **State:** **M2 PR #6 MERGED into main 2026-11-01 — INCOMPLETE / FOLLOW-UP REQUIRED.** Renderer/PID remediation verified in source, but serial metadata performance, netstat timeout/TCP-UDP behavior, address fidelity and identity completeness need correction. Only 11 locally reported mocked passes; no PR #6 CI; live WT-02 inconclusive. Current main STILL has baseline raw-PID stop behavior; M1.2 remains mandatory. Reconcile PR #4/#5 without discarding M2 code.
@@ -184,7 +186,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 ### M3 — Simple developer workflow and features
 
 - [ ] Fast port-first lookup with clear occupied/free/unknown states.
-- [ ] M3: deliver [issue #7 targeted conflict-check UI](https://github.com/dev-rygar/port-manager/issues/7) for user-selected port and bind address, with timestamped evidence and safe next steps even when All Ports contains no matching listener. Avoid promising guaranteed availability or automatically probing via bind.
+- [ ] **Immediate combined task:** M3: deliver [issue #7 Check → Diagnose → Guided Resolve UI](https://github.com/dev-rygar/port-manager/issues/7) for user-selected port and bind address, timestamped evidence, manual short-lived bind check, and safe alternative suggestions even if All Ports has no row. Do not claim guaranteed availability or auto-kill.
 - [ ] Treat an optional active bind probe as an explicitly user-initiated, short-lived feature requiring separate engineering risk review; do not implement automatic probes during refresh.
 - [ ] Understandable owner identification, with uncertainty distinguished from facts.
 - [ ] Related ports and parent/child inspection without default tree termination.
@@ -227,7 +229,7 @@ Documentation approvals were recorded by the owner in conversation / PR comments
 3. **Investigate WT-02 in normal Windows context:** persistent disposable listener accepted a client but neither OS `netstat` nor app showed LISTENING; preserve blocked status until repeatable end-to-end evidence. Record [issue #7](https://github.com/dev-rygar/port-manager/issues/7) Cartograph 5173 as an **unresolved user scenario**, not a proven parsing defect.
 4. **Complete doc PR integrations** #1 → #2 → #3 under separate merge approval; reconcile tracker after each merge.
 5. **Address post-merge M2 review findings in a targeted Codex task:** set a real total refresh deadline and command bounds; preserve per-address listener fidelity; document TCP-only or implement/test UDP; encode creation-time completeness precisely; add tests and CI.
-6. **After M2 foundations, implement accepted issue #7 diagnostics:** targeted port check (port/address/protocol) with listener vs availability uncertainty, excluded-range context, explicit permissions, and M3 port-first UX. Only opt-in active bind checks after separate risk review.
+6. **In the same M0/M1.1 integration branch, implement issue #7 now**: targeted read-only checks, explicit-click short-lived bind probe, guided alternatives and port-first UX. Review the probe's bounded resource use before release; do not run it automatically and do not terminate processes.
 7. **Keep M1.2 as its own release-blocking safety workstream:** privileged backend authorization based on process-instance identity, impact preview, revalidation and post-stop verification. The M2 merge is read-only discovery progress, not an authorization to terminate PIDs.
 8. **Rerun WT-01–WT-03 after fixes; WT-04–WT-06 only with safeguards:** WT-07–WT-12 remain tracked and release-blocking where applicable.
 
