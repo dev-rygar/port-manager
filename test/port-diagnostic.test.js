@@ -6,18 +6,29 @@ const assert = require('node:assert/strict');
 const { parseNetstat } = require('../src/services/portService');
 const { checkPort, probePort, findAlternativePort, parseExcludedRanges } = require('../src/services/portDiagnosticService');
 
-function mockServer({ error, listen = true } = {}) {
+function mockServer({ error, listen = true, listeningDelayMs = 0, closeError = null, closeCallback = true } = {}) {
   const calls = { listen: 0, close: 0 };
   const listeners = {};
   return {
     calls,
+    closed: false,
     once(type, callback) { listeners[type] = callback; },
     listen(_options, callback) {
       calls.listen += 1;
       if (error) return queueMicrotask(() => listeners.error(error));
-      if (listen) queueMicrotask(callback);
+      if (listen) setTimeout(() => {
+        listeners.listening?.();
+        callback?.();
+      }, listeningDelayMs);
     },
-    close(callback) { calls.close += 1; queueMicrotask(callback); },
+    close(callback) {
+      calls.close += 1;
+      if (!closeCallback) return;
+      queueMicrotask(() => {
+        if (!closeError) this.closed = true;
+        callback?.(closeError);
+      });
+    },
   };
 }
 
@@ -74,6 +85,7 @@ test('diagnostics: explicit bind probes classify success, EADDRINUSE, EACCES, an
   const success = mockServer();
   const available = await probePort({ port: 5173, adapters: { createServer: () => success } });
   assert.equal(available.outcome, 'Available at check time');
+  assert.equal(success.closed, true);
   assert.equal(success.calls.close, 1);
 
   const inUse = mockServer({ error: Object.assign(new Error('busy'), { code: 'EADDRINUSE' }) });
@@ -93,9 +105,75 @@ test('diagnostics: explicit bind probes classify success, EADDRINUSE, EACCES, an
   timedOut.close = () => { timedOut.calls.close += 1; };
   timedOut.closeAllConnections = () => { timedOut.calls.forceClose = (timedOut.calls.forceClose || 0) + 1; };
   const timed = await probePort({ port: 5173, adapters: { createServer: () => timedOut, timeoutMs: 5, cleanupTimeoutMs: 5 } });
-  assert.equal(timed.probe.status, 'timeout');
+  assert.equal(timed.outcome, 'Cannot determine');
+  assert.equal(timed.probe.status, 'cleanup-timeout');
+  assert.equal(timed.probe.cleanupConfirmed, false);
   assert.equal(timedOut.calls.close, 1);
   assert.equal(timedOut.calls.forceClose, 1);
+});
+
+test('diagnostics: late listening after timeout cannot claim cleanup and failed close is explicit', async () => {
+  const late = mockServer({ listeningDelayMs: 25, closeCallback: false });
+  const lateResult = await probePort({ port: 5173, adapters: { createServer: () => late, timeoutMs: 5, cleanupTimeoutMs: 5 } });
+  assert.equal(lateResult.outcome, 'Cannot determine');
+  assert.equal(lateResult.probe.cleanupConfirmed, false);
+  assert.equal(lateResult.probe.status, 'cleanup-timeout');
+  await new Promise((resolve) => setTimeout(resolve, 35));
+  assert.ok(late.calls.close >= 1);
+
+  const closeFailed = mockServer({ closeError: Object.assign(new Error('close failed'), { code: 'EIO' }) });
+  const failedResult = await probePort({ port: 5173, adapters: { createServer: () => closeFailed } });
+  assert.equal(failedResult.outcome, 'Cannot determine');
+  assert.equal(failedResult.probe.status, 'cleanup-failed');
+  assert.equal(failedResult.probe.cleanupConfirmed, false);
+  assert.equal(closeFailed.calls.close, 2);
+});
+
+test('diagnostics: parser-to-checkPort preserves a Windows TIME_WAIT row with PID 0', async () => {
+  const timeWaitLine = '  TCP    127.0.0.1:5173     127.0.0.1:6000     TIME_WAIT       0\r\n';
+  assert.equal(parseNetstat(timeWaitLine)[0].pid, 0);
+  const runner = async (file) => {
+    if (file === 'netstat.exe') return { stdout: timeWaitLine };
+    if (file === 'netsh.exe') return { stdout: '' };
+    throw new Error(`Unexpected command ${file}`);
+  };
+  const result = await checkPort({ port: 5173, adapters: { commandRunner: runner } });
+  assert.equal(result.outcome, 'No listener observed');
+  assert.equal(result.listener, null);
+  assert.deepEqual(result.context.nonListening[0], {
+    protocol: 'TCP', state: 'TIME_WAIT', localAddress: '127.0.0.1:5173', localHost: '127.0.0.1',
+    addressFamily: 'IPv4', port: 5173, pid: 0, ownerStatus: 'unknown',
+  });
+});
+
+test('diagnostics: failed netstat is an explicit unknown state', async () => {
+  const runner = async () => { throw Object.assign(new Error('netstat timed out'), { code: 'ETIMEDOUT' }); };
+  const result = await checkPort({ port: 5173, adapters: { commandRunner: runner } });
+  assert.equal(result.outcome, 'Cannot determine');
+  assert.match(result.reason, /netstat timed out/);
+  assert.equal(result.evidenceSource, 'netstat.exe -ano');
+});
+
+test('diagnostics: IPv6 wildcard evidence remains ambiguous for an IPv4 request', async () => {
+  const listener = { protocol: 'TCP', state: 'LISTENING', localHost: '::', localAddress: '[::]:5173', addressFamily: 'IPv6', port: 5173, pid: 4321 };
+  const result = await checkPort({ port: 5173, localAddress: '127.0.0.1', adapters: diagnosticAdapters([listener]) });
+  assert.equal(result.outcome, 'Cannot determine');
+  assert.equal(result.context.crossFamilyAmbiguous, true);
+});
+
+test('diagnostics: IPv6 checks use IPv6 exclusion evidence only', async () => {
+  const calls = [];
+  const result = await checkPort({ port: 5173, localAddress: '::1', adapters: {
+    commandRunner: async (file, args) => {
+      calls.push({ file, args });
+      if (file === 'netstat.exe') return { stdout: '' };
+      return { stdout: 'Start Port    End Port\r\n5173 5173\r\n' };
+    },
+  } });
+  assert.equal(result.outcome, 'No listener observed');
+  assert.equal(result.context.excludedRanges.family, 'ipv6');
+  assert.match(result.context.excludedRanges.source, /ipv6/);
+  assert.deepEqual(calls.find((call) => call.file === 'netsh.exe').args.slice(0, 3), ['interface', 'ipv6', 'show']);
 });
 
 test('diagnostics: alternative search is bounded and returns an available-at-check-time candidate', async () => {
@@ -116,6 +194,33 @@ test('diagnostics: alternative search skips excluded candidates and clamps the r
   } });
   assert.equal(result.candidate.port, 5175);
   assert.deepEqual(probes, [5175]);
+});
+
+test('diagnostics: alternative search reuses one passive snapshot and obeys its overall deadline', async () => {
+  const calls = [];
+  const result = await findAlternativePort({ port: 5173, limit: 3, deadlineMs: 100, adapters: {
+    commandRunner: async (file) => {
+      calls.push(file);
+      if (file === 'netstat.exe') return { stdout: '' };
+      return { stdout: '' };
+    },
+    probePort: async ({ port }) => ({ port, outcome: 'Available at check time', probe: { cleanupConfirmed: true } }),
+  } });
+  assert.equal(result.outcome, 'Available at check time');
+  assert.equal(result.candidate.port, 5174);
+  assert.equal(calls.filter((file) => file === 'netstat.exe').length, 1);
+  assert.equal(calls.filter((file) => file === 'netsh.exe').length, 1);
+
+  let passiveAborted = false;
+  const slow = await findAlternativePort({ port: 5173, limit: 3, deadlineMs: 20, adapters: {
+    checkPort: ({ signal }) => new Promise((resolve) => {
+      signal?.addEventListener('abort', () => { passiveAborted = true; resolve({ outcome: 'Cannot determine' }); }, { once: true });
+      setTimeout(() => resolve({ outcome: 'No listener observed' }), 100);
+    }),
+  } });
+  assert.equal(slow.outcome, 'Cannot determine');
+  assert.match(slow.reason, /deadline/i);
+  assert.equal(passiveAborted, true);
 });
 
 test('diagnostics: excluded range parser is read-only and range-based', () => {

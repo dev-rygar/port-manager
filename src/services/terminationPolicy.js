@@ -1,5 +1,15 @@
 'use strict';
 
+// Destructive process actions stay disabled until M1.2 can authorize a stable
+// process instance across preview, revalidation, execution, and verification.
+const DESTRUCTIVE_ACTIONS_ENABLED = false;
+
+function assertDestructiveActionsEnabled() {
+  if (!DESTRUCTIVE_ACTIONS_ENABLED) {
+    throw new Error('Process termination is disabled until M1.2 process-instance authorization is implemented');
+  }
+}
+
 // Conservative first-line guardrails. This is NOT a comprehensive Windows
 // protected-process policy, nor does passing it prove an arbitrary process safe.
 const PROTECTED_PROCESS_NAMES = new Set([
@@ -34,7 +44,7 @@ function normalizeProcessName(value) {
   return value.trim().split(/[\\/]/).pop().trim().toLowerCase();
 }
 
-function assertProcessCanBeStopped({ pid, processName, ownsListeningPort }) {
+function assertProcessCanBeStopped({ pid, processName, ownsListeningPort, metadataStatus, creationTime }) {
   const id = parseProcessId(pid);
 
   // Known critical PID on Windows, reject before any OS command is issued.
@@ -44,6 +54,13 @@ function assertProcessCanBeStopped({ pid, processName, ownsListeningPort }) {
   // this is stale and must not terminate an unrelated process.
   if (!ownsListeningPort) {
     throw new Error('Process no longer owns a detected listening port; refresh and try again');
+  }
+
+  if (metadataStatus !== undefined && metadataStatus !== 'available') {
+    throw new Error('Cannot verify complete process metadata; termination refused');
+  }
+  if (metadataStatus !== undefined && !creationTime) {
+    throw new Error('Cannot verify process instance creation time; termination refused');
   }
 
   const name = normalizeProcessName(processName);
@@ -56,4 +73,10 @@ function assertProcessCanBeStopped({ pid, processName, ownsListeningPort }) {
   return { pid: id, processName: name };
 }
 
-module.exports = { parseProcessId, assertProcessCanBeStopped, normalizeProcessName };
+module.exports = {
+  DESTRUCTIVE_ACTIONS_ENABLED,
+  assertDestructiveActionsEnabled,
+  parseProcessId,
+  assertProcessCanBeStopped,
+  normalizeProcessName,
+};

@@ -156,7 +156,7 @@ test('discovery: netstat listener data is preserved when metadata is denied and 
     throw deniedError();
   };
 
-  const rows = await getPorts({ commandRunner: runner });
+  const rows = (await getPorts({ commandRunner: runner })).ports;
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].port, 3000);
@@ -195,9 +195,18 @@ test('discovery: listener rows survive a metadata deadline', async () => {
     return { stdout: JSON.stringify({ id: 4321, name: 'node', path: 'C:\\node.exe' }) };
   };
 
-  const rows = await getPorts({ commandRunner: runner, deadlineMs: 40 });
+  const rows = (await getPorts({ commandRunner: runner, deadlineMs: 40 })).ports;
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].port, 5173);
   assert.equal(rows[0].processMetadataStatus, 'timeout');
+});
+
+test('discovery: failed netstat returns an explicit cannot-determine snapshot', async () => {
+  const runner = async () => { throw Object.assign(new Error('netstat timed out'), { code: 'ETIMEDOUT' }); };
+  const result = await getPorts({ commandRunner: runner, deadlineMs: 20 });
+  assert.equal(result.status, 'cannot-determine');
+  assert.deepEqual(result.ports, []);
+  assert.equal(result.errorCode, 'ETIMEDOUT');
+  assert.match(result.error, /netstat timed out|Discovery deadline exceeded/);
 });

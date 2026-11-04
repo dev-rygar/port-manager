@@ -1,67 +1,98 @@
 # Port Conflict Resolution Integration
 
-**Final engineering status:** READY FOR REVIEW
+**Engineering status:** READY FOR RE-REVIEW
 **Branch:** `integration/m0-m1.1-port-conflict`
+**Starting review commit:** `18639fd9bc7053e74b191a93eb64a9d4a92460de`
 **Base:** `main` merge `44cdc962c0fc0438cdbdf2b3b1ddc5b87f868466` (PR #6)
 **Scope:** M0/M1.1 integration, bounded Windows discovery, Issue #7 diagnostics, and port-first resolution UI
 
-## Files changed
+## Implementation summary
 
-- M0: `.github/workflows/baseline-checks.yml`, `docs/TESTING.md`, and baseline test scripts/package commands.
-- M1.1: `src/services/ipcSecurity.js`, `src/services/terminationPolicy.js`, `main.js`, and `docs/M1_SECURITY_GUARDS.md`.
-- Discovery: `src/services/portService.js` and `test/service-discovery.test.js`.
-- Diagnostics: `src/services/portDiagnosticService.js` and `test/port-diagnostic.test.js`.
-- UI/bridge: `preload.js`, `src/renderer/index.html`, `src/renderer/app.js`, and `src/renderer/styles.css`.
-- Regression coverage: `test/main-ipc-baseline.test.js`, `test/renderer-baseline.test.js`, `test/service-baseline.test.js`, and `test/termination-guards.test.js`.
+- M0 test infrastructure and CI remain integrated through `.github/workflows/baseline-checks.yml`, `docs/TESTING.md`, package scripts, and baseline tests.
+- M1.1 IPC sender checks, strict PID validation, protected-process guards, explicit metadata states, and renderer escaping remain in place.
+- Privileged `ports:kill` and destructive renderer controls are fail-closed by default. The existing M1.1 policy code is preserved for future M1.2 integration, but a trusted direct IPC call cannot bypass the feature gate.
+- Windows discovery retains TCP listener rows when process metadata is unavailable and returns an explicit `cannot-determine` result when `netstat.exe` fails or times out.
+- `parseNetstat` retains non-listening diagnostic rows, including `TIME_WAIT` with PID 0. PID 0 is diagnostic context only and is never a stoppable owner.
+- Address-family matching is conservative: IPv6 wildcard evidence can make an IPv4 result ambiguous, and IPv4 exclusion evidence is not reused as IPv6 evidence.
+- Check Port uses passive `netstat.exe -ano` evidence first, followed by an explicit user-initiated temporary TCP bind probe. Alternative-port search has an overall deadline and reuses the passive network snapshot.
 
-## Integration decisions
+## Complete changed-file inventory
 
-PR #4's test/CI foundation was merged first, then PR #5's IPC and termination guardrails were reconciled with PR #6's already-merged discovery changes. Obsolete WMIC and command-string mocks were adapted to the current `execFile`/PowerShell PID-environment architecture. The discovery implementation retains PR #6's explicit metadata states, safe renderer escaping, and non-WMIC lookup. The old shell-interpolated `killProcess` path was not restored.
+- `.github/workflows/baseline-checks.yml`
+- `docs/M1_SECURITY_GUARDS.md`
+- `docs/TESTING.md`
+- `docs/test-results/PORT_CONFLICT_RESOLUTION_INTEGRATION.md`
+- `main.js`
+- `package.json`
+- `preload.js`
+- `src/renderer/app.js`
+- `src/renderer/index.html`
+- `src/renderer/safeMarkup.js`
+- `src/renderer/styles.css`
+- `src/services/ipcSecurity.js`
+- `src/services/portDiagnosticService.js`
+- `src/services/portReference.js`
+- `src/services/portService.js`
+- `src/services/terminationPolicy.js`
+- `test/main-ipc-baseline.test.js`
+- `test/port-diagnostic.test.js`
+- `test/renderer-baseline.test.js`
+- `test/service-baseline.test.js`
+- `test/service-discovery.test.js`
+- `test/termination-guards.test.js`
 
-The backend remains authoritative: IPC requires the expected top-level application frame; PID input is strict; PID 4 and protected names are refused; current listener ownership and usable process metadata are required before `taskkill`; and taskkill uses a bounded argument-array `execFile` call. M1.2 identity continuity is intentionally not claimed.
+Unrelated local reports remain untracked and excluded from this change.
 
-## Diagnostic service architecture
+## M0/M1.1 integration details
 
-`portService.js` uses injectable command runners, TCP-only `netstat.exe -ano` parsing, explicit subprocess timeouts, an approximately eight-second discovery deadline, and at most four concurrent metadata subprocesses. Listener records retain separate IPv4/IPv6/wildcard addresses. Metadata fields remain separate: process name, executable path, creation time, status/source/error, and application label.
+IPC requires the expected top-level application frame. PID input is strict, PID 4 and protected names remain refused, and the prior M1.1 ownership/metadata/creation-time checks remain available for future authorized execution. Destructive process actions are currently disabled before discovery or `taskkill` work begins. No real process termination tests were run.
 
-`portDiagnosticService.js` provides validated `checkPort`, read-only TCP state and excluded-range context, explicit result outcomes, a user-triggered temporary TCP bind probe with `finally`-equivalent close handling, and a bounded user-triggered alternative-port search. Neither refresh nor passive checking binds a port or terminates a process.
+Discovery uses injectable command runners, TCP-only `netstat.exe -ano` parsing, explicit subprocess deadlines, bounded metadata concurrency, and separate process name/path/creation-time/status fields. The old shell-interpolated kill path was not restored.
 
-## UI changes
+## Check Port workflow
 
-The new Check a port panel accepts a port and local bind address (default `127.0.0.1`), shows the outcome, timestamp, evidence, and owner confidence, and offers explicit Test if port can be used, Find alternative port, and Copy port actions. All Ports remains the passive listener overview. Stop controls are disabled when process identity is not verified or the target is protected.
+1. Validate the TCP port and requested local address.
+2. Obtain a bounded passive snapshot and address-family-specific excluded-port context.
+3. Match the requested address scope while preserving non-listening rows as context.
+4. Report `Listening`, `No listener observed`, or `Cannot determine` with evidence and timestamp. A missing listener is not presented as proof of availability.
+5. Only when the user explicitly selects the bind probe, create a temporary TCP server for the requested address and port.
+6. Offer alternative-port search only as a bounded, user-initiated follow-up.
 
-## Validation
+## Temporary bind probe cleanup guarantees
 
-| Check | Result |
+The probe records listening, bind-error, close-requested, close-confirmed, close-failed, and cleanup-timeout states. It requests close on success, bind errors, operation timeout, and abort. A result is classified as available or unavailable only when the close callback confirms cleanup. Late listening events, failed close callbacks, missing close callbacks, and cleanup deadlines return `Cannot determine` with `cleanupConfirmed: false`; they never claim confirmed cleanup. Best-effort connection-closing methods are invoked on cleanup timeout when the server exposes them.
+
+## Alternative-port resolution
+
+Search is capped at the configured candidate limit and an overall deadline. When using the built-in diagnostic path it obtains one passive network snapshot and reuses it across candidates. Each candidate is checked passively, excluded ranges are treated as context rather than proof, and the explicit probe receives the remaining deadline. Deadline expiry, probe cleanup uncertainty, and diagnostic failures return `Cannot determine` rather than a false candidate.
+
+## Validation results
+
+| Check | Actual result |
 | --- | --- |
 | `npm.cmd run check:syntax` | PASS |
-| `npm.cmd test` | PASS — 65 tests, 49 passing, 16 intentional TODOs, 0 failures |
-| `git diff --check` | PASS after documentation whitespace cleanup |
-| Disposable Windows listener smoke | BLOCKED — temporary Node listener on `127.0.0.1:55317` was not visible to `netstat.exe`; diagnostic returned `No listener observed`. No process was killed. |
+| `npm.cmd test` | PASS - 74 tests, 58 passing, 16 intentional TODOs, 0 failures |
+| `git diff --check` | PASS |
+| Windows smoke test | BLOCKED / inconclusive - prior disposable Node listener on `127.0.0.1:55317` was not visible to `netstat.exe`; no process was killed |
 
 All subprocess tests are mocked. No administrator privileges, system configuration changes, or real process termination tests were used.
 
-## Issue #7 acceptance results
+## Regression coverage added or updated
 
-| Acceptance item | Result |
-| --- | --- |
-| Check `127.0.0.1:5173` independently of All Ports | PASS — service/UI path and regression coverage |
-| Exact listener endpoint/PID with owner uncertainty | PASS — mocked TCP/address/metadata coverage |
-| No listener does not mean free | PASS |
-| Non-listening state and excluded range as context | PASS |
-| IPv4/IPv6/loopback/wildcard scope | PASS |
-| Permission/tool/timeout uncertainty | PASS |
-| Explicit bind success, `EADDRINUSE`, `EACCES`, cleanup | PASS |
-| Bounded alternative-port search and copy guidance | PASS |
-| No automatic termination/elevation/configuration changes | PASS |
-| Windows end-to-end listener evidence | BLOCKED — environment did not expose the disposable listener in `netstat` |
+- Direct trusted IPC and backend calls cannot bypass the disabled termination feature gate.
+- Partial metadata and missing creation time cannot satisfy the preserved termination policy.
+- Temporary bind success, `EADDRINUSE`, `EACCES`, operation timeout, delayed listening, failed close, and cleanup timeout paths are covered.
+- Realistic Windows `TIME_WAIT` output is parsed through `parseNetstat` into `checkPort`, retaining PID 0 as non-actionable context.
+- Failed netstat discovery and renderer display of `cannot-determine` are covered.
+- IPv6 wildcard / IPv4 dual-stack ambiguity and address-family-specific excluded-range lookup are covered.
+- Alternative-port snapshot reuse and overall-deadline behavior are covered.
 
-## Known limitations and remaining safety gaps
+## Known limitations and remaining blockers
 
-- The smoke result is evidence of an environment limitation, not proof that the parser or OS listener behavior is correct on all supported Windows configurations.
-- Passive `No listener observed` remains an unknown-availability result; only the explicit bind probe establishes availability at that instant.
+- M1.2 termination safety is NOT IMPLEMENTED: no process-instance handle or identity continuity across preview/revalidation/execution, no impact preview, and no independent post-stop verification. Termination remains disabled by default.
+- Windows production validation remains incomplete. The available smoke evidence is environment-inconclusive and does not establish behavior on all supported Windows configurations.
+- Passive `No listener observed` remains an unknown-availability result; only the explicit bind probe establishes availability at that instant, and even that result is conditioned on confirmed cleanup.
 - Excluded-range lookup is best effort and is never treated as proof of a particular bind failure.
-- M1.2 is NOT IMPLEMENTED: no process-instance handle/identity continuity, impact preview, immediate pre-stop revalidation contract, or independent post-stop verification.
-- No automatic killing was added to diagnostics, refresh, alternative-port search, or no-listener outcomes.
+- The remaining M1.2 termination-safety requirements and Issue #7 completion remain open.
 
-Review is required before commit, merge, or release.
+**This PR is for independent engineering review. M1.2 termination safety and Windows production validation remain incomplete.**

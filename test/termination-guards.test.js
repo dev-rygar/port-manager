@@ -68,23 +68,22 @@ test('PM-A01: protected PID 4 is blocked before any OS command', async () => {
   assert.equal(h.commands.length, 0);
 });
 
-test('PM-A01: reported system-managed executable is blocked before taskkill', async () => {
+test('PM-A12: termination is disabled before any OS command, including protected names', async () => {
   const h = createHarness({ pid: 70000, processName: 'SVCHOST.EXE' });
-  await assert.rejects(h.service.killProcess(70000), /Protected or system-managed process/);
-  assert.ok(h.commands.some((c) => c.command === 'netstat.exe'));
-  assert.ok(h.commands.every((c) => c.command !== 'taskkill'));
+  await assert.rejects(h.service.killProcess(70000), /termination is disabled until M1.2/);
+  assert.equal(h.commands.length, 0);
 });
 
-test('PM-A01: unknown process name fails closed, even if port is a common dev port', async () => {
+test('PM-A12: termination is disabled before unknown metadata can reach taskkill', async () => {
   const h = createHarness({ pid: 70000, unknown: true });
-  await assert.rejects(h.service.killProcess(70000), /Cannot verify process name/);
-  assert.ok(h.commands.every((c) => c.command !== 'taskkill'));
+  await assert.rejects(h.service.killProcess(70000), /termination is disabled until M1.2/);
+  assert.equal(h.commands.length, 0);
 });
 
-test('PM-A01: no current listening endpoint means no termination', async () => {
+test('PM-A12: termination is disabled before stale listener checks can reach taskkill', async () => {
   const h = createHarness({ pid: 70000, listening: false });
-  await assert.rejects(h.service.killProcess(70000), /no longer owns a detected listening port/);
-  assert.ok(h.commands.every((c) => c.command !== 'taskkill'));
+  await assert.rejects(h.service.killProcess(70000), /termination is disabled until M1.2/);
+  assert.equal(h.commands.length, 0);
 });
 
 test('PM-A11: malformed PID never invokes the OS or a truncated target', async () => {
@@ -93,35 +92,37 @@ test('PM-A11: malformed PID never invokes the OS or a truncated target', async (
   assert.equal(h.commands.length, 0);
 });
 
-test('M1: known ordinary listener uses argument-array taskkill (no shell)', async () => {
+test('PM-A12: ordinary listener cannot invoke argument-array taskkill while disabled', async () => {
   const h = createHarness({ pid: 70000 });
-  const result = await h.service.killProcess(70000);
-  assert.equal(result.success, true);
-  assert.equal(result.pid, 70000);
-  const taskkill = h.commands.filter((c) => c.command === 'taskkill');
-  assert.equal(taskkill.length, 1);
-  assert.equal(taskkill[0].command, 'taskkill');
-  assert.deepEqual(Array.from(taskkill[0].argv), ['/PID', '70000', '/F']);
-  assert.equal(taskkill[0].options.windowsHide, true);
-  assert.ok(taskkill[0].options.timeout > 0);
+  await assert.rejects(h.service.killProcess(70000), /termination is disabled until M1.2/);
+  assert.equal(h.commands.filter((c) => c.command === 'taskkill').length, 0);
 });
 
-test('M1: taskkill failure is returned as a rejection, not success', async () => {
+test('PM-A12: taskkill failure path is unreachable while termination is disabled', async () => {
   const h = createHarness({ taskkillFails: true });
-  await assert.rejects(h.service.killProcess(70000), /Access is denied/);
+  await assert.rejects(h.service.killProcess(70000), /termination is disabled until M1.2/);
+  assert.equal(h.commands.filter((c) => c.command === 'taskkill').length, 0);
 });
 
-test('M1: WMIC unavailability can use tasklist name-only fallback', async () => {
+test('PM-A12: name-only fallback cannot authorize termination while disabled', async () => {
   const h = createHarness({ wmicUnavailable: true });
-  const result = await h.service.killProcess(70000);
-  assert.equal(result.pid, 70000);
-  assert.equal(h.commands.filter((c) => c.command === 'taskkill').length, 1);
+  await assert.rejects(h.service.killProcess(70000), /termination is disabled until M1.2/);
+  assert.equal(h.commands.filter((c) => c.command === 'taskkill').length, 0);
 });
 
 test('M1: suspicious names are denied by policy regardless of PID range', () => {
   for (const name of ['lsass.exe', 'WinLogon.EXE', 'explorer.exe', 'C:\\Windows\\svchost.exe', 'SYSTEM']) {
     assert.throws(() => assertProcessCanBeStopped({ pid: 70000, processName: name, ownsListeningPort: true }), /Protected/);
   }
+});
+
+test('M1.2 prerequisite: partial metadata cannot authorize a process instance', () => {
+  assert.throws(() => assertProcessCanBeStopped({
+    pid: 70000, processName: 'node.exe', ownsListeningPort: true, metadataStatus: 'partial', creationTime: null,
+  }), /complete process metadata/);
+  assert.throws(() => assertProcessCanBeStopped({
+    pid: 70000, processName: 'node.exe', ownsListeningPort: true, metadataStatus: 'available', creationTime: null,
+  }), /creation time/);
 });
 
 // Still open until preview/revalidation/OS-specific identity work is complete.

@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { assertTrustedIpcSender } = require('./src/services/ipcSecurity');
-const { parseProcessId } = require('./src/services/terminationPolicy');
+const { parseProcessId, assertDestructiveActionsEnabled } = require('./src/services/terminationPolicy');
 const { getPorts, killProcess } = require('./src/services/portService');
 const { checkPort, probePort, findAlternativePort } = require('./src/services/portDiagnosticService');
 
@@ -57,6 +57,7 @@ ipcMain.handle('ports:get', async (event) => {
 ipcMain.handle('ports:kill', async (event, pid) => {
   assertTrustedIpcSender(event, mainWindow, rendererUrl);
   const validatedPid = parseProcessId(pid);
+  assertDestructiveActionsEnabled();
   try {
     return await killProcess(validatedPid);
   } catch (err) {

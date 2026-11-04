@@ -136,10 +136,10 @@ test('PM-A11: malformed PIDs are rejected at IPC before reaching service', async
   assert.deepEqual(h.calls, []);
 });
 
-test('IPC: valid high PID reaches the service boundary', async () => {
+test('PM-A12: trusted IPC cannot bypass the disabled termination feature gate', async () => {
   const h = await readyHarness();
-  await assert.rejects(h.handlers.get('ports:kill')(h.trustedEvent(), 70000), /OS execution is disabled/);
-  assert.deepEqual(h.calls, [70000]);
+  await assert.rejects(h.handlers.get('ports:kill')(h.trustedEvent(), 70000), /termination is disabled until M1.2/);
+  assert.deepEqual(h.calls, []);
 });
 
 test('Electron: sandbox enabled and unexpected navigation/window open denied', async () => {

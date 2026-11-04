@@ -28,11 +28,12 @@ const copyPortBtn = document.getElementById('copy-port');
 
 const STORAGE_KEY = 'port-manager-tags';
 const DEV_TAGS = ['backend', 'frontend', 'database'];
+const DESTRUCTIVE_ACTIONS_ENABLED = false;
 
 const TYPE_TOOLTIPS = {
   system: 'Windows or OS core service. Usually safe to leave running.',
   user: 'Your apps or services. Safe to manage.',
-  development: 'Dev server (Vite, Next, Node, etc.). Safe to kill when not coding.',
+  development: 'Dev server (Vite, Next, Node, etc.). Process stopping is disabled until M1.2 instance authorization.',
   common: 'Well-known service (DB, HTTP, Redis, etc.). Check before killing.',
   unknown:
     "Port not in our reference database. Could be: user apps, dynamic Windows ports (49152–65535), or less common services. Check the Application column and click the row for details.",
@@ -74,7 +75,12 @@ async function loadPorts() {
   hideError();
 
   try {
-    portsData = await window.portManager.getPorts();
+    const snapshot = await window.portManager.getPorts();
+    const discovery = Array.isArray(snapshot) ? { status: 'available', ports: snapshot } : snapshot;
+    portsData = discovery?.ports || [];
+    if (discovery?.status !== 'available') {
+      showError(`Cannot determine current listeners: ${discovery?.error || 'TCP discovery failed'}`);
+    }
     renderCurrentTab();
   } catch (err) {
     showError(err.message || 'Failed to load ports');
@@ -134,14 +140,14 @@ function sortPorts(data) {
 }
 
 function canRequestStop(process) {
-  if (!process || process.pid === 4 || process.processMetadataStatus !== 'available') return false;
+  if (!DESTRUCTIVE_ACTIONS_ENABLED || !process || process.pid === 4 || process.processMetadataStatus !== 'available') return false;
   const name = String(process.processName || '').toLowerCase();
   return !['system', 'system idle process', 'registry', 'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe', 'lsass.exe', 'lsaiso.exe', 'services.exe', 'svchost.exe', 'dwm.exe', 'sihost.exe', 'fontdrvhost.exe', 'explorer.exe', 'runtimebroker.exe', 'searchhost.exe', 'startmenuexperiencehost.exe', 'spoolsv.exe', 'conhost.exe'].includes(name);
 }
 
 function stopButton(process) {
   const disabled = !canRequestStop(process);
-  const title = disabled ? 'Stopping is disabled until process identity is verified' : 'Stop this verified process';
+  const title = disabled ? 'Stopping is disabled until M1.2 process-instance authorization' : 'Stop this verified process';
   return `<button class="btn btn-danger kill-btn" data-pid="${process.pid}" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''}>Stop</button>`;
 }
 
@@ -278,7 +284,7 @@ function renderDevTab() {
       <div class="dev-group" data-tag="${tag}">
         <div class="dev-group-header">
           <h3 class="dev-group-title">${tag.charAt(0).toUpperCase() + tag.slice(1)}</h3>
-          <button class="btn btn-danger kill-all-btn" data-pids="${pids.join(',')}" data-tag="${tag}" ${canStopAll ? '' : 'disabled'} title="${canStopAll ? 'Stop verified processes in this group' : 'Stopping is disabled until every process identity is verified'}">Stop all ${tag.charAt(0).toUpperCase() + tag.slice(1)}</button>
+          <button class="btn btn-danger kill-all-btn" data-pids="${pids.join(',')}" data-tag="${tag}" ${canStopAll ? '' : 'disabled'} title="${canStopAll ? 'Stop verified processes in this group' : 'Stopping is disabled until M1.2 process-instance authorization'}">Stop all ${tag.charAt(0).toUpperCase() + tag.slice(1)}</button>
         </div>
         <div class="dev-group-items">
           ${items
@@ -361,7 +367,7 @@ function showDetails(p) {
   const detailLocal = document.getElementById('detail-local');
   if (detailLocal) detailLocal.textContent = p.localAddress || '(not available)';
   const detailIdentity = document.getElementById('detail-identity');
-  if (detailIdentity) detailIdentity.textContent = p.processMetadataStatus === 'available' ? 'Verified for this snapshot only' : 'Not verified; stopping disabled';
+  if (detailIdentity) detailIdentity.textContent = p.processMetadataStatus === 'available' ? 'Metadata available; stopping disabled until M1.2 instance authorization' : 'Not verified; stopping disabled';
   detailsPanel.classList.remove('hidden');
 }
 
@@ -398,7 +404,7 @@ function renderDiagnostic(result) {
   diagnosticOwner.classList.add('hidden');
   diagnosticOwner.textContent = '';
   if (result.process && result.process.metadataStatus === 'available') {
-    diagnosticOwner.textContent = `Verified owner for this snapshot: ${result.process.name || 'Unknown'}${result.listener?.pid ? ` (PID ${result.listener.pid})` : ''}`;
+    diagnosticOwner.textContent = `Owner metadata available for this snapshot: ${result.process.name || 'Unknown'}${result.listener?.pid ? ` (PID ${result.listener.pid})` : ''}. Stopping is disabled until M1.2 instance authorization.`;
     diagnosticOwner.classList.remove('hidden');
   } else if (result.outcome === 'Listening') {
     diagnosticOwner.textContent = 'A listener was observed, but its process identity could not be verified.';

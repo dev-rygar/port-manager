@@ -3,7 +3,7 @@
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const net = require('net');
-const { parseProcessId, assertProcessCanBeStopped } = require('./terminationPolicy');
+const { parseProcessId, assertDestructiveActionsEnabled, assertProcessCanBeStopped } = require('./terminationPolicy');
 const { getPortInfo, getFriendlyProcessName, getFallbackAppName } = require('./portReference');
 
 const execFileAsync = promisify(execFile);
@@ -69,7 +69,7 @@ function parseEndpoint(value) {
   return { host: match[1], port: Number(match[2]), family: net.isIP(match[1]) };
 }
 
-function parseNetstat(stdout, { listeningOnly = true } = {}) {
+function parseNetstat(stdout, { listeningOnly = false } = {}) {
   const results = [];
   for (const rawLine of String(stdout || '').split(/\r?\n/)) {
     const parts = rawLine.trim().split(/\s+/);
@@ -79,18 +79,21 @@ function parseNetstat(stdout, { listeningOnly = true } = {}) {
     const local = parseEndpoint(parts[1]);
     if (!local || !local.port || !local.family) continue;
     const state = parts.length >= 5 ? parts[3].toUpperCase() : '';
-    const pid = parseListenerPid(parts[parts.length - 1]);
-    if (pid === null || (listeningOnly && state !== 'LISTENING')) continue;
-    results.push({ protocol, state: state || '-', localAddress: parts[1], localHost: local.host, addressFamily: local.family === 6 ? 'IPv6' : 'IPv4', port: local.port, pid });
+    const ownerToken = parts[4];
+    const parsedPid = parseListenerPid(ownerToken);
+    const isUnknownOwner = parsedPid === null && (!ownerToken || ownerToken === '0');
+    if (listeningOnly && (state !== 'LISTENING' || parsedPid === null)) continue;
+    if (!listeningOnly && parsedPid === null && !isUnknownOwner) continue;
+    results.push({ protocol, state: state || '-', localAddress: parts[1], localHost: local.host, addressFamily: local.family === 6 ? 'IPv6' : 'IPv4', port: local.port, pid: parsedPid === null ? 0 : parsedPid, ownerStatus: parsedPid === null ? 'unknown' : 'identified' });
   }
   return results;
 }
 
-async function getTcpSnapshot(commandRunner = runCommand, deadlineAt = Date.now() + NETSTAT_TIMEOUT_MS) {
+async function getTcpSnapshot(commandRunner = runCommand, deadlineAt = Date.now() + NETSTAT_TIMEOUT_MS, signal) {
   const budget = Math.min(NETSTAT_TIMEOUT_MS, remainingBudget(deadlineAt));
   if (budget <= 0) throw Object.assign(new Error('Discovery deadline exceeded'), { code: 'ETIMEDOUT' });
   const result = await withTimeout(
-    commandRunner('netstat.exe', ['-ano'], { encoding: 'utf8', timeout: budget, windowsHide: true, shell: false }),
+    commandRunner('netstat.exe', ['-ano'], { encoding: 'utf8', timeout: budget, windowsHide: true, shell: false, signal }),
     budget,
     'netstat timed out'
   );
@@ -174,21 +177,38 @@ function getApplicationName(processName) { return KNOWN_APPS[String(processName 
 async function getPorts({ commandRunner = runCommand, deadlineMs = DISCOVERY_DEADLINE_MS } = {}) {
   const deadlineAt = Date.now() + deadlineMs; let snapshot;
   try { snapshot = await getTcpSnapshot(commandRunner, deadlineAt); }
-  catch (error) { if (error?.code === 'ETIMEDOUT') return []; throw error; }
+  catch (error) {
+    return {
+      status: 'cannot-determine',
+      ports: [],
+      checkedAt: new Date().toISOString(),
+      evidenceSource: 'netstat.exe -ano',
+      error: error?.message || 'TCP listener discovery failed',
+      errorCode: error?.code || 'DISCOVERY_FAILED',
+    };
+  }
   const processMap = await getProcessInfo(snapshot.listeners.map((row) => row.pid), commandRunner, { deadlineAt });
-  return snapshot.listeners.map((row) => {
+  const ports = snapshot.listeners.map((row) => {
     const info = processMap.get(row.pid) || unavailableProcessInfo('unavailable', 'metadata', 'No metadata result');
     const portInfo = getPortInfo(row.port); const friendlyProcess = getFriendlyProcessName(info.name);
     const applicationName = info.name === 'Unknown' ? 'Unknown process' : getApplicationName(info.name) || getFallbackAppName(row.pid, info.name) || friendlyProcess || info.name || 'Unknown process';
     return { ...row, processName: info.name, processPath: info.path, processCreationTime: info.creationTime, processMetadataStatus: info.metadataStatus, processMetadataSource: info.metadataSource, processMetadataError: info.metadataError, applicationName, portType: portInfo.type, portService: portInfo.service, portDescription: portInfo.description };
   });
+  return { status: 'available', ports, checkedAt: new Date().toISOString(), evidenceSource: snapshot.evidenceSource };
 }
 
 async function killProcess(pid) {
   const id = parseProcessId(pid); if (id === 4) throw new Error('Protected Windows process');
+  assertDestructiveActionsEnabled();
   const listeners = await getNetstat(); const ownsListeningPort = listeners.some((row) => row.pid === id);
   const processInfo = ownsListeningPort ? await getProcessInfo([id]) : new Map();
-  assertProcessCanBeStopped({ pid: id, processName: processInfo.get(id)?.name, ownsListeningPort });
+  assertProcessCanBeStopped({
+    pid: id,
+    processName: processInfo.get(id)?.name,
+    metadataStatus: processInfo.get(id)?.metadataStatus,
+    creationTime: processInfo.get(id)?.creationTime,
+    ownsListeningPort,
+  });
   await execFileAsync('taskkill', ['/PID', String(id), '/F'], { encoding: 'utf8', windowsHide: true, timeout: 5000, shell: false });
   return { success: true, pid: id };
 }

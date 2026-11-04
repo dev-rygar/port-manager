@@ -64,7 +64,7 @@ function defaultCommands(command) {
 
 test('discovery: listening TCP endpoints are returned, established TCP is omitted', async () => {
   const { service, commands } = createServiceHarness(defaultCommands);
-  const rows = await service.getPorts();
+  const rows = (await service.getPorts()).ports;
 
   assert.equal(rows.length, 2);
   assert.deepEqual(Array.from(rows, (row) => row.port), [3000, 3001]);
@@ -81,7 +81,7 @@ test('discovery: missing WMIC invokes a name-only tasklist fallback', async () =
     if (command === 'tasklist.exe') return '"node.exe","1234","Console","1","25,440 K"\r\n';
     throw new Error('Unexpected OS command: ' + command);
   });
-  const rows = await service.getPorts();
+  const rows = (await service.getPorts()).ports;
   assert.equal(rows.length, 2);
   assert.ok(rows.every((row) => row.processName === 'node.exe' && row.processPath === ''));
   assert.ok(commands.some(({ command }) => command === 'tasklist.exe'));
@@ -94,7 +94,7 @@ test('discovery: missing process data is represented in processName', async () =
     if (command === 'tasklist.exe') return '';
     throw new Error('Unexpected command: ' + command);
   });
-  const rows = await service.getPorts();
+  const rows = (await service.getPorts()).ports;
   assert.ok(rows.every((row) => row.processName === 'Unknown'));
   // Existing applicationName fallback may still show a port-name guess.
   // That misleading presentation is a documented release blocker (PM-A06).

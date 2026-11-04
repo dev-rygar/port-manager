@@ -160,6 +160,18 @@ test('renderer: protected process names and unknown metadata disable stop contro
   assert.equal(h.app.canRequestStop({ pid: 99, processName: 'node.exe', processMetadataStatus: 'permission-denied' }), false);
 });
 
+test('renderer: discovery failure is shown as cannot determine instead of an empty success', async () => {
+  const h = createRendererHarness({
+    status: 'cannot-determine',
+    ports: [],
+    error: 'netstat timed out',
+  });
+  await h.app.loadPorts();
+  assert.equal(h.get('table-body').innerHTML, '');
+  assert.equal(h.get('error').textContent, 'Cannot determine current listeners: netstat timed out');
+  assert.equal(h.get('error').classList.contains('hidden'), false);
+});
+
 test.todo('PM-A04: persistent port labels never authorize termination of a future owner');
 test.todo('PM-A07: app metadata cannot inject attributes through innerHTML');
 test.todo('PM-A15: older refresh results cannot overwrite newer snapshots');
