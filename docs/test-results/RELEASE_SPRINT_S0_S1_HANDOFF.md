@@ -57,7 +57,27 @@ Baseline commands on `origin/main` completed before implementation:
 
 ## PR #12 review remediation
 
-The remediation adds renderer request/selection generations, document-epoch lifecycle invalidation, exact endpoint matching, observation-mismatch refusal, bounded and superseding preview tokens, and labels that distinguish observed metadata from handle-verified identity. Destructive operations remain disabled.
+The remediation resolves all three blocking findings from the PR #12 independent review:
+
+1. **Exact endpoint identity:**
+   - Evaluates address scope using `sameAddressScope` while enforcing exact selected endpoint presence (`exactSelected = listening.find(r => r.localHost === request.localAddress)`).
+   - Returns a non-actionable `refused` result (`The selected listener endpoint is no longer present; preview is non-actionable.`) when the selected listener is missing, preventing wildcard listeners (e.g. `0.0.0.0`) from silently substituting for an exact endpoint (e.g. `127.0.0.1`), or vice-versa.
+   - Detects multiple owner PIDs across the scoped listeners on that port and refuses ambiguous ownership (`More than one process could own the requested address scope; preview is ambiguous and non-actionable.`).
+   - Added regression tests in `test/process-preview.test.js` covering exact vs. wildcard endpoint ownership changes, missing endpoints, and address-scope ownership conflicts.
+
+2. **Asynchronous preview race:**
+   - Implemented request/selection generation counters (`impactPreviewGeneration`) and selection fingerprinting (`processSelectionKey`) in `src/renderer/app.js`.
+   - Selection changes (`showDetails`), panel closure (`hideDetails`), and refresh (`loadPorts`) immediately invalidate in-flight preview requests.
+   - Any delayed or out-of-order preview response for a previous process (e.g. process A) is discarded and will not render when process B is currently selected or when the panel is closed/refreshed.
+   - Added deferred-promise regression tests in `test/renderer-baseline.test.js`.
+
+3. **Document-instance token binding:**
+   - Implemented main-process document generation binding (`documentEpoch`) in `main.js` and bound it to all preview tokens in `trustedPreviewBinding()`.
+   - Hooked `mainWindow.webContents.on('did-start-navigation', ...)` and `mainWindow.on('closed', ...)` to trigger `invalidatePreviewDocument()`, incrementing `documentEpoch` and invalidating all outstanding preview tokens in `processPreviewService`.
+   - Preview tokens issued to previous document instances are immediately stale upon reload or document replacement.
+   - Added tests covering reload, replay, and stale tokens in `test/main-ipc-baseline.test.js` and `test/process-preview.test.js`.
+
+`DESTRUCTIVE_ACTIONS_ENABLED` remains `false`.
 
 ## Backend in-flight preview race remediation — 2026-11-05
 
@@ -69,10 +89,10 @@ New non-destructive regression tests cover (1) an old metadata request finishing
 
 ## Validation
 
-Previous PR #12 local validation (before this backend race remediation):
+Final local validation for this increment (observed after PR #12 review remediation, backend race remediation, and exact endpoint identity fixes):
 
 - `npm.cmd run check:syntax` — PASS
-- `npm.cmd test` — PASS: 99 tests, 83 pass, 0 fail, 16 TODO
+- `npm.cmd test` — PASS: 104 tests, 88 pass, 0 fail, 16 TODO
 - `git diff --check` — PASS
 
 All automated service, IPC, and renderer tests use mocks/in-memory DOMs. They do not prove native Windows identity or termination safety.

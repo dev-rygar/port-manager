@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const net = require('net');
 const path = require('path');
 const { getTcpSnapshot, getProcessInfo } = require('./portService');
-const { validateRequest } = require('./portDiagnosticService');
+const { validateRequest, sameAddressScope } = require('./portDiagnosticService');
 const { assertProcessCanBeStopped, isValidCreationTime } = require('./terminationPolicy');
 
 const PREVIEW_TTL_MS = 30_000;
@@ -99,8 +99,7 @@ function compareCandidates(request, row) {
   const requestedFamily = net.isIP(request.localAddress);
   return row.protocol === request.protocol &&
     row.port === request.port &&
-    requestedFamily === (row.addressFamily === 'IPv6' ? 6 : 4) &&
-    row.localHost === request.localAddress;
+    sameAddressScope({ host: request.localAddress, family: requestedFamily }, row);
 }
 
 function sortCandidates(request, rows) {

@@ -66,8 +66,8 @@ test('S1-01/S1-02: preview derives exact identity and includes all same-instance
 test('S1-01: a wildcard listener cannot substitute for the exact selected endpoint', async () => {
   const fixture = createFixture({ entries: [endpoint('0.0.0.0:3000', '0.0.0.0', 3000, 70001)] });
   const result = await fixture.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, { sessionId: 'window-a' });
-  assert.equal(result.status, 'uncertain');
-  assert.match(result.reason, /No matching LISTENING socket/);
+  assert.equal(result.status, 'refused');
+  assert.match(result.reason, /The selected listener endpoint is no longer present; preview is non-actionable/);
   assert.equal(result.actionable, false);
   assert.equal('preview' in result, false);
 });
@@ -75,8 +75,29 @@ test('S1-01: a wildcard listener cannot substitute for the exact selected endpoi
 test('S1-01: an exact listener cannot substitute for a selected wildcard endpoint', async () => {
   const fixture = createFixture({ entries: [endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70001)] });
   const result = await fixture.service.previewStop({ port: 3000, localAddress: '0.0.0.0' }, { sessionId: 'window-a' });
+  assert.equal(result.status, 'refused');
+  assert.match(result.reason, /The selected listener endpoint is no longer present; preview is non-actionable/);
+  assert.equal(result.actionable, false);
+  assert.equal('preview' in result, false);
+});
+
+test('S1-01: when no listener exists on the port at all, preview is uncertain', async () => {
+  const fixture = createFixture({ entries: [] });
+  const result = await fixture.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, { sessionId: 'window-a' });
   assert.equal(result.status, 'uncertain');
-  assert.match(result.reason, /No matching LISTENING socket/);
+  assert.match(result.reason, /No matching LISTENING socket was observed/);
+  assert.equal(result.actionable, false);
+  assert.equal('preview' in result, false);
+});
+
+test('S1-01: exact listener is refused when exact and wildcard have different owner PIDs', async () => {
+  const fixture = createFixture({ entries: [
+    endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70000),
+    endpoint('0.0.0.0:3000', '0.0.0.0', 3000, 70001),
+  ] });
+  const result = await fixture.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, { sessionId: 'window-a' });
+  assert.equal(result.status, 'refused');
+  assert.match(result.reason, /More than one process could own the requested address scope/);
   assert.equal(result.actionable, false);
   assert.equal('preview' in result, false);
 });
@@ -324,7 +345,7 @@ test('S1-03: a new failing request immediately revokes the prior issued preview 
 test('S1-04: ambiguous ownership and failed discovery remain explicit', async () => {
   const ambiguous = createFixture({ entries: [
     endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70000),
-    endpoint('127.0.0.1:3000', '127.0.0.1', 3000, 70001),
+    endpoint('0.0.0.0:3000', '0.0.0.0', 3000, 70001),
   ] });
   const ambiguousResult = await ambiguous.service.previewStop({ port: 3000, localAddress: '127.0.0.1' }, { sessionId: 'window-a' });
   assert.equal(ambiguousResult.status, 'refused');
