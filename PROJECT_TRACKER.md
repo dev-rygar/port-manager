@@ -1,8 +1,8 @@
 # Port Manager — Project Tracker
 
-**Last updated:** 2026-11-04  
+**Last updated / GitHub status verified:** 2026-11-05  
 **Status:** In development — **not production-ready**  
-**Current focus:** [Epic #11](https://github.com/dev-rygar/port-manager/issues/11) S0 ACCEPTED; S1 [PR #12](https://github.com/dev-rygar/port-manager/pull/12) directly patched to `11593b9` and **READY FOR INDEPENDENT RE-REVIEW**. [GitHub CI SUCCESS](https://github.com/dev-rygar/port-manager/actions/runs/41874730585) (102 tests / 86 pass / 16 TODO / 0 fail). Backend request-ordering and document-lifecycle race fixed with new mock regressions; S1 not merged, S2 dependent work pending review, termination disabled  
+**Current focus:** [Epic #11](https://github.com/dev-rygar/port-manager/issues/11): S0 COMPLETE; S1 [PR #12](https://github.com/dev-rygar/port-manager/pull/12) **READY FOR FINAL INDEPENDENT REVIEW**, head `11593b9`, draft/unmerged, [CI SUCCESS](https://github.com/dev-rygar/port-manager/actions/runs/41874730585) (102 tests, 86 pass, 16 TODO, 0 fail). S2 not started; S3/S4 Windows gates outstanding; S5 UI/setup queued; S6/S7 not started. Process termination disabled on main and S1; no published releases  
 **Application baseline on main:** 7fe087dd9257c5ab1a350c83468cd794ec676525 (PR #8 merge, 2026-11-04)
 **Post-merge validation:** [main push CI #41829413241](https://github.com/dev-rygar/port-manager/actions/runs/41829413241) **SUCCESS**, checked at merge commit `7fe087d`; mocked tests/syntax only, not native Windows acceptance.
 
